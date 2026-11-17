@@ -1,14 +1,14 @@
 # BCE、D-BCE 与伴随优化数学说明 / Mathematics of BCE, D-BCE and Adjoint Optimization
 
-本文说明软件中“旧 BCE 手调 → 新 D-BCE 优化”的数学关系，并与 CST 对比。符号均以归一化弦长 (x\in[0,1]) 表示。This document derives the manual BCE to D-BCE workflow and compares it with CST, using normalized chord (x\in[0,1]).
+本文说明软件中“旧 BCE 手调 → 新 D-BCE 优化”的数学关系，并与 CST 对比。符号均以归一化弦长 $x\in[0,1]$ 表示。This document derives the manual BCE to D-BCE workflow and compares it with CST, using normalized chord $x\in[0,1]$.
 
 ## 1. 原始 BCE / Legacy BCE
 
 ### 1.1 三条 Bézier 函数 / Three Bézier functions
 
-对任意控制量 (q\in\{h,\alpha,\beta\})，采用 n 阶 Bézier 曲线：
+对任意控制量 $q\in\{h,\alpha,\beta\}$，采用 n 阶 Bézier 曲线：
 
-For each control quantity (q\in\{h,\alpha,\beta\}), use an n-th order Bézier curve:
+For each control quantity $q\in\{h,\alpha,\beta\}$, use an n-th order Bézier curve:
 
 $$
 q(t)=\sum_{i=0}^{n}B_i^n(t)q_i,
@@ -24,13 +24,13 @@ $$
 x_i=\left(\frac{i}{n}\right)^\gamma,
 $$
 
-而当前软件在网格/拟合阶段优先使用余弦采样，以避免额外优化变量 (gamma) 带来的尺度病态。The current fitting and meshing stages prefer cosine sampling, avoiding an additional poorly scaled exponent (gamma).
+而当前软件在网格/拟合阶段优先使用余弦采样，以避免额外优化变量 $\gamma$ 带来的尺度病态。The current fitting and meshing stages prefer cosine sampling, avoiding an additional poorly scaled exponent $\gamma$.
 
 ### 1.2 局部椭圆族 / Family of local ellipses
 
-记 (alpha,\beta) 为弧度，定义
+记 $\alpha,\beta$ 为弧度，定义
 
-With (alpha,\beta) in radians, define
+With $\alpha,\beta$ in radians, define
 
 $$
 D=\cos^2\beta-\sin^2\alpha,
@@ -42,9 +42,9 @@ r_y=\frac{h\sin\beta\cos\beta}{D},\qquad
 r_x=\left|\frac{h\sin\beta}{\sqrt{D}}\right|.
 $$
 
-在每个中心 (X) 上构造椭圆
+在每个中心 $X$ 上构造椭圆
 
-At each center (X), construct
+At each center $X$, construct
 
 $$
 \left(\frac{x-X}{r_x}\right)^2+
@@ -74,7 +74,7 @@ $$
 
 `h,α,β` 具有直观的设计含义，因此原始 BCE 很适合人工拖点。但用于梯度优化时存在三类困难：The parameters are intuitive for manual editing, but gradient optimization faces three issues:
 
-1. 三角函数和分母 (D) 强耦合，接近 (D=0) 时敏感度放大。Trigonometric coupling amplifies sensitivities near (D=0).
+1. 三角函数和分母 $D$ 强耦合，接近 $D=0$ 时敏感度放大。Trigonometric coupling amplifies sensitivities near $D=0$.
 2. `sup/inf` 的包络控制椭圆会切换，Jacobian 仅分段光滑。Envelope ownership switches, so the Jacobian is only piecewise smooth.
 3. 不同控制点对几何的尺度和作用范围差异很大，形成近共线列。Columns have different scales and can become nearly collinear.
 
@@ -84,20 +84,21 @@ $$
 
 ### 2.1 基函数 / Basis function
 
-对中心 (c) 和半宽 (w>0)，定义标准 bump：
+对中心 $c$ 和半宽 $w>0$，定义标准 bump：
 
-For center (c) and half-width (w>0), define
+For center $c$ and half-width $w>0$, define
 
 $$
-\phi_{c,w}(x)=
-\begin{cases}
-\exp\!\left(1-\dfrac{1}{1-s^2}\right), & |s|<1,\\
-0, & |s|\ge1,
-\end{cases}
-\qquad s=\frac{x-c}{w}.
+s=\frac{x-c}{w},\qquad
+\phi_{c,w}(x)=\exp\!\left(1-\frac{1}{1-s^2}\right)
+\quad\text{when } |s|<1,
 $$
 
-归一化使 (phi(c)=1)。在 (x=c\pm w) 处，函数及任意阶导数都为零，因此 (phi\in C^\infty)，且支撑严格限制在 `[c-w,c+w]`。The normalization gives (phi(c)=1). The function and every derivative vanish at the support boundary, so it is (C^\infty) and exactly local.
+$$
+\phi_{c,w}(x)=0\quad\text{when }|s|\ge1.
+$$
+
+归一化使 $\phi(c)=1$。在 $x=c\pm w$ 处，函数及任意阶导数都为零，因此 $\phi\in C^\infty$，且支撑严格限制在 `[c-w,c+w]`。The normalization gives $\phi(c)=1$. The function and every derivative vanish at the support boundary, so it is $C^\infty$ and exactly local.
 
 如需额外端点安全，可乘
 
@@ -120,9 +121,9 @@ m_0=\frac{y_{u0}+y_{l0}}{2},\qquad
 t_0=\frac{y_{u0}-y_{l0}}{2}.
 $$
 
-由笔刷系数 (a_j,b_j) 构造
+由笔刷系数 $a_j,b_j$ 构造
 
-Using brush coefficients (a_j,b_j), define
+Using brush coefficients $a_j,b_j$, define
 
 $$
 \delta m(x)=\sum_j a_j\phi_j(x),\qquad
@@ -145,15 +146,15 @@ $$
 
 ### 2.3 Jacobian / Geometry Jacobian
 
-离散在 (N) 个弦向点后，几何增量可写为
+离散在 $N$ 个弦向点后，几何增量可写为
 
-After discretization at (N) chordwise stations,
+After discretization at $N$ chordwise stations,
 
 $$
 \Delta\mathbf y=J\mathbf z,
 $$
 
-其中弯度列为 ([\phi_j;\phi_j])，厚度列为 ([\phi_j;-\phi_j])。因此在相同采样和权重下，弯度块与厚度块天然正交：A camber column is ([\phi_j;\phi_j]), while a thickness column is ([\phi_j;-\phi_j]); the two blocks are naturally orthogonal under identical sampling weights:
+其中弯度列为 $[\phi_j;\phi_j]$，厚度列为 $[\phi_j;-\phi_j]$。因此在相同采样和权重下，弯度块与厚度块天然正交：A camber column is $[\phi_j;\phi_j]$, while a thickness column is $[\phi_j;-\phi_j]$; the two blocks are naturally orthogonal under identical sampling weights:
 
 $$
 [\phi;\phi]^T[\psi;-\psi]=0.
@@ -191,7 +192,7 @@ $$
 \lambda\|L\Phi\mathbf b\|_2^2,
 $$
 
-其中 (W) 可提高前缘权重，(L) 是离散二阶导数。宽度重叠和适度正则可减少窄笔刷相消导致的波浪。Here (W) can emphasize the leading edge and (L) is a discrete second derivative. Overlapping widths and moderate regularization reduce oscillatory cancellation.
+其中 $W$ 可提高前缘权重，$L$ 是离散二阶导数。宽度重叠和适度正则可减少窄笔刷相消导致的波浪。Here $W$ can emphasize the leading edge and $L$ is a discrete second derivative. Overlapping widths and moderate regularization reduce oscillatory cancellation.
 
 零手调增量不需要数值拟合，直接返回基准几何，因此交接误差为机器零。For zero manual change, the baseline is returned directly, giving machine-zero handoff error.
 
@@ -220,9 +221,9 @@ CST 列在全弦长上有支撑，低阶时条件良好并擅长整体厚度/弯
 
 ## 5. 梯度投影、预条件与稀疏选择 / Gradient projection and conditioning
 
-设离散表面形状梯度为 (mathbf g)，候选几何基矩阵为 (J)。对经尺度归一化并 QR 分解得到的正交基 (Q)，可表示梯度为
+设离散表面形状梯度为 $\mathbf g$，候选几何基矩阵为 $J$。对经尺度归一化并 QR 分解得到的正交基 $Q$，可表示梯度为
 
-For surface gradient (mathbf g), normalize the candidate matrix and compute a QR basis (Q). The representable gradient is
+For surface gradient $\mathbf g$, normalize the candidate matrix and compute a QR basis $Q$. The representable gradient is
 
 $$
 \mathbf g_P=QQ^T\mathbf g.
@@ -236,7 +237,7 @@ $$
 \eta=\frac{\|QQ^T\mathbf g\|_2}{\|\mathbf g\|_2}.
 $$
 
-(eta) 很低表示当前变量无法表达伴随建议的形变，此时增加迭代步并无意义，应调整模式、中心或尺度。A low (eta) means the active variables cannot represent the adjoint direction; change the mode, centers or widths rather than merely adding iterations.
+$\eta$ 很低表示当前变量无法表达伴随建议的形变，此时增加迭代步并无意义，应调整模式、中心或尺度。A low $\eta$ means the active variables cannot represent the adjoint direction; change the mode, centers or widths rather than merely adding iterations.
 
 软件按候选列与残余梯度的归一化内积进行贪心选择：The software greedily selects the candidate with the largest normalized projection on the residual gradient:
 
@@ -249,7 +250,7 @@ $$
 
 ## 6. 信赖域与接受判据 / Trust region and acceptance
 
-令当前目标为 (F_k)，模型预测试步 (mathbf s) 的下降为
+令当前目标为 $F_k$，模型预测试步 $\mathbf s$ 的下降为
 
 Let the local model predict
 
@@ -267,7 +268,7 @@ $$
 \rho=\frac{\Delta F_{\text{act}}}{\Delta F_{\text{pred}}}.
 $$
 
-若 (ho) 足够大且几何/气动约束满足，则接受；否则拒绝并缩小信赖域。较好的模型一致性可扩大半径。A step is accepted when (ho) is sufficient and all constraints pass; otherwise it is rejected and the trust radius shrinks. Strong agreement allows radius expansion.
+若 $\rho$ 足够大且几何/气动约束满足，则接受；否则拒绝并缩小信赖域。较好的模型一致性可扩大半径。A step is accepted when $\rho$ is sufficient and all constraints pass; otherwise it is rejected and the trust radius shrinks. Strong agreement allows radius expansion.
 
 分块步长可对 CST、弯度笔刷、厚度笔刷和攻角使用不同尺度：Blockwise scaling may be applied to CST, camber brushes, thickness brushes and angle of attack:
 
@@ -276,13 +277,13 @@ $$
 \qquad \|D\mathbf s\|_2\le\Delta.
 $$
 
-这里 (D) 同时承担单位换算和预条件作用。Here (D) provides both unit scaling and preconditioning.
+这里 $D$ 同时承担单位换算和预条件作用。Here $D$ provides both unit scaling and preconditioning.
 
 ## 7. 固定攻角与固定升力 / Fixed AoA and fixed lift
 
-固定攻角时直接最小化例如 (C_D)。固定升力时，攻角可视为附加变量，通过小修正满足
+固定攻角时直接最小化例如 $C_D$。固定升力时，攻角可视为附加变量，通过小修正满足
 
-At fixed AoA, the objective may be (C_D). At fixed lift, angle of attack is an auxiliary variable corrected to satisfy
+At fixed AoA, the objective may be $C_D$. At fixed lift, angle of attack is an auxiliary variable corrected to satisfy
 
 $$
 c(\mathbf z,\alpha)=C_L(\mathbf z,\alpha)-C_{L,\text{target}}=0.

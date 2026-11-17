@@ -19,7 +19,7 @@ SU2 Airfoil Studio is a professional desktop workflow for two-dimensional airfoi
 ## 为什么使用它 / Why use it
 
 - **人机协同设计 / Human-in-the-loop design**：先拖动 `h(x)`、`α(x)`、`β(x)` 控制点形成设计意图，再用 D-BCE 微调。Manual editing remains a first-class operation instead of being replaced by an optimizer.
-- **局部且光滑 / Local and smooth**：D-BCE 笔刷具有紧支撑和 (C^\infty) 光滑性，适合局部压力峰、前缘或尾缘附近的精修。Compact brushes affect only their support while remaining infinitely differentiable.
+- **局部且光滑 / Local and smooth**：D-BCE 笔刷具有紧支撑和 $C^\infty$ 光滑性，适合局部压力峰、前缘或尾缘附近的精修。Compact brushes affect only their support while remaining infinitely differentiable.
 - **全局与局部接力 / Global-to-local relay**：CST 负责低维全局搜索，D-BCE 负责稀疏局部修正。CST provides global shape changes; D-BCE supplies localized refinement.
 - **结构化网格 / Structured mesh**：生成共形、全四边形 C-H 网格，并在导出前检查有向面积、最小角和缩放 Jacobian。Conformal all-quad C-H meshes are quality-gated before export.
 - **可追溯计算 / Traceable CFD**：保存配置、网格质量、原始 SU2 历史、表面数据、VTU、收敛图和气动报告。Every run keeps the numerical evidence needed for review.
@@ -98,20 +98,22 @@ B_n(t)=\sum_{i=0}^{n}\binom{n}{i}(1-t)^{n-i}t^iP_i,
 \qquad x_i=\left(\frac{i}{n}\right)^\gamma.
 $$
 
-由 (h,\alpha,\beta) 构造一族局部椭圆，取上包络与下包络形成翼型。它非常适合交互设计，但包络切换和三角函数耦合会使高维优化的条件数变差。
+由 $h,\alpha,\beta$ 构造一族局部椭圆，取上包络与下包络形成翼型。它非常适合交互设计，但包络切换和三角函数耦合会使高维优化的条件数变差。
 
-A family of local ellipses is constructed from (h,\alpha,\beta); its upper and lower envelopes form the airfoil. This is intuitive for manual design, but envelope switching and trigonometric coupling can degrade conditioning in high-dimensional optimization.
+A family of local ellipses is constructed from $h,\alpha,\beta$; its upper and lower envelopes form the airfoil. This is intuitive for manual design, but envelope switching and trigonometric coupling can degrade conditioning in high-dimensional optimization.
 
 D-BCE 使用可调尺度紧支撑光滑笔刷：
 
 D-BCE uses a scale-adjustable compact-support smooth brush:
 
 $$
-\phi_{c,w}(x)=
-\begin{cases}
-\exp\!\left(1-\dfrac{1}{1-((x-c)/w)^2}\right), & |x-c|<w,\\
-0, & |x-c|\ge w.
-\end{cases}
+s=\frac{x-c}{w},\qquad
+\phi_{c,w}(x)=\exp\!\left(1-\frac{1}{1-s^2}\right)
+\quad\text{when } |s|<1,
+$$
+
+$$
+\phi_{c,w}(x)=0\quad\text{when }|s|\ge 1.
 $$
 
 弯度和半厚度解耦：
@@ -132,8 +134,8 @@ $$
 | 几何、D-BCE、余弦重采样与报告回归 / Geometry, D-BCE, cosine resampling and reporting | 17/17 passed |
 | 强弯度 NACA6409 真实结构化网格 / Real structured mesh for strongly cambered NACA6409 | Passed, 274.611 s |
 | 冻结版依赖自检 / Frozen dependency doctor | GUI, Gmsh 4.15.2, SU2 8.5.0 passed |
-| 手调翼型稳态 RANS 收敛样例 / Manually deformed steady RANS case | 1500 iters, 1225.77 s, (C_L=0.51510), (C_D=0.01094) |
-| 暖启动收敛样例 / Warm-start case | 698 iters, 940.70 s, (C_L=0.51507), (C_D=0.01094) |
+| 手调翼型稳态 RANS 收敛样例 / Manually deformed steady RANS case | 1500 iters, 1225.77 s, `CL=0.51510`, `CD=0.01094` |
+| 暖启动收敛样例 / Warm-start case | 698 iters, 940.70 s, `CL=0.51507`, `CD=0.01094` |
 | 冻结版离散伴随接力 / Frozen discrete-adjoint chain | Accepted step; 106.16 s in recorded integration smoke test |
 
 详细条件、硬件相关耗时、失败样例与可复现命令见 [测试报告](docs/TESTING.md)。Timing is hardware-dependent. Conditions, negative cases and reproducible commands are documented in [Testing](docs/TESTING.md).

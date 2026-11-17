@@ -13,7 +13,7 @@
 | 几何 / Geometry | 大弯度上下表面拓扑拆分 / topology split for strong camber | Passed |
 | 几何 / Geometry | 已闭合用户尖后缘保形 / preserve imported sharp TE | Passed |
 | D-BCE | 零改动交接 / zero-edit handoff | Machine-zero |
-| D-BCE | 强手调重拟合 / large manual-edit refit | RMSE (1.461\times10^{-4}), 20 variables |
+| D-BCE | 强手调重拟合 / large manual-edit refit | RMSE `1.461e-4`, 20 variables |
 | 单元测试 / Unit regression | 几何、D-BCE、余弦重采样、报告 / geometry, D-BCE, resampling, report | 17/17 passed |
 | 网格 / Mesh | NACA6409 强弯度真实结构化网格 / real strongly cambered grid | Passed, 274.611 s |
 | 冻结版 / Frozen build | GUI、Gmsh、SU2 自检 / dependency doctor | Passed |
@@ -73,12 +73,12 @@ NACA6409 真实网格回归耗时 **274.611 s**。该时间包含多组径向过
 
 | 运行 / Run | 迭代 / Iterations | 实际时间 / Wall time | 最终 CL | 最终 CD | 尾窗 CL 极差 | 尾窗 CD 极差 | 判定 / Verdict |
 |---|---:|---:|---:|---:|---:|---:|---|
-| 冷启动手调翼型 / cold manual | 1500 | 1225.77 s | 0.5150975 | 0.0109406 | (7.65\times10^{-5}) | (3.13\times10^{-6}) | Passed |
-| 暖启动手调翼型 / warm manual | 698 | 940.70 s | 0.5150660 | 0.0109391 | (2.50\times10^{-5}) | (3.22\times10^{-6}) | Passed |
+| 冷启动手调翼型 / cold manual | 1500 | 1225.77 s | 0.5150975 | 0.0109406 | `7.65e-5` | `3.13e-6` | Passed |
+| 暖启动手调翼型 / warm manual | 698 | 940.70 s | 0.5150660 | 0.0109391 | `2.50e-5` | `3.22e-6` | Passed |
 
 暖启动最终残差：`rms[Rho]=-9.873`, `rms[RhoU]=-8.525`, `rms[RhoV]=-9.274`, `rms[RhoE]=-9.226`, `rms[nu]=-11.363`。Warm-start final residuals are listed here to make the convergence claim auditable.
 
-并非所有尝试都通过严格尾窗。例如零攻角筛选算例尽管 CL 已稳定，CD 尾窗约 (1.44\times10^{-5})，略高于 (1\times10^{-5}) 门槛，因此记录为未通过而不是隐藏。Not every trial passed the strict window. A zero-angle screening case had stable lift but a drag range of about (1.44\times10^{-5}), just above the (1\times10^{-5}) limit, and is explicitly recorded as failed.
+并非所有尝试都通过严格尾窗。例如零攻角筛选算例尽管 CL 已稳定，CD 尾窗约 `1.44e-5`，略高于 `1e-5` 门槛，因此记录为未通过而不是隐藏。Not every trial passed the strict window. A zero-angle screening case had stable lift but a drag range of about `1.44e-5`, just above the `1e-5` limit, and is explicitly recorded as failed.
 
 ## 5. 离散伴随集成 / Discrete-adjoint integration
 
@@ -127,7 +127,7 @@ SU2_CFD_AD (drag/lift) -> SU2_DOT_AD -> parameter direction
 .\.venv\Scripts\python.exe main_pipeline.py --mesh-only --global-refinement 1.0
 ```
 
-便携版发布前还应运行 `packaging/smoke_test_portable.py` 和 `packaging/frozen_dependency_doctor.py`。Before release, also run the portable smoke test and frozen dependency doctor.
+便携版发布前还应运行 `AutoFoilCLI.exe doctor` 和 `SU2_AutoFoil_Optimizer_Studio.exe --smoke-test`。Before release, also run the portable dependency doctor and GUI smoke test.
 
 ## 8. 尚未宣称的内容 / What is not claimed
 
