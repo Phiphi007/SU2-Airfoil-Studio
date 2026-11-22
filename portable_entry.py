@@ -7,6 +7,12 @@ import sys
 import traceback
 
 
+# Keep Windows DLL-directory handles alive for the lifetime of the process.
+# CPython closes a directory again as soon as the object returned by
+# os.add_dll_directory() is garbage-collected.
+_DLL_DIRECTORY_HANDLES: list[object] = []
+
+
 def main() -> int:
     if "--worker-log" in sys.argv:
         index = sys.argv.index("--worker-log")
@@ -40,8 +46,43 @@ def main() -> int:
         del sys.argv[1]
         from parametric_adjoint.cli import main as optimizer_main
         return optimizer_main(sys.argv[1:])
-    gui_names = {"AutoFoilStudio", "SU2_AutoFoil_Optimizer_Studio"}
-    if Path(sys.executable).stem in gui_names or sys.argv[1:2] == ["--gui"]:
+    qt_gui_names = {"su2_airfoil_studio_qt"}
+    if Path(sys.executable).stem.lower() in qt_gui_names or sys.argv[1:2] == ["--qt-gui"]:
+        if sys.argv[1:2] == ["--qt-gui"]:
+            del sys.argv[1]
+        try:
+            if getattr(sys, "frozen", False):
+                application_dir = Path(sys.executable).resolve().parent
+                internal_dir = application_dir / "_internal"
+                os.chdir(application_dir)
+                if internal_dir.is_dir():
+                    dll_directories = [
+                        internal_dir,
+                        internal_dir / "PySide6",
+                        internal_dir / "shiboken6",
+                    ]
+                    existing = [path for path in dll_directories if path.is_dir()]
+                    os.environ["PATH"] = os.pathsep.join(map(str, existing)) + os.pathsep + os.environ.get("PATH", "")
+                    if hasattr(os, "add_dll_directory"):
+                        for directory in existing:
+                            _DLL_DIRECTORY_HANDLES.append(os.add_dll_directory(str(directory)))
+            from qt_app.main import main as qt_gui_main
+            return qt_gui_main()
+        except Exception:
+            data_root().mkdir(parents=True, exist_ok=True)
+            log = data_root() / "qt_gui_error.log"
+            log.write_text(traceback.format_exc(), encoding="utf-8")
+            if sys.platform == "win32":
+                import ctypes
+                ctypes.windll.user32.MessageBoxW(
+                    0,
+                    f"Qt 启动失败 / Qt startup failed\n{log}",
+                    "SU2 Airfoil Studio Qt",
+                    0x10,
+                )
+            return 1
+    gui_names = {"autofoilstudio", "su2_autofoil_optimizer_studio"}
+    if Path(sys.executable).stem.lower() in gui_names or sys.argv[1:2] == ["--gui"]:
         if sys.argv[1:2] == ["--gui"]:
             del sys.argv[1]
         try:

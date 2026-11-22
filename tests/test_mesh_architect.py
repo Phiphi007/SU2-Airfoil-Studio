@@ -11,6 +11,7 @@ from core_modules.mesh_architect import (
     _clean_sharp_boundary,
     estimate_mesh_counts,
     _resample_sharp_airfoil,
+    _uniform_farfield_body_angles,
     _rotate_to_chord_axis,
     _write_su2_file,
     generate_mesh,
@@ -134,6 +135,8 @@ class MeshArchitectTests(unittest.TestCase):
         self.assertLessEqual(
             quality["leading_edge_radial_direction_p95_step_deg"], 8.0
         )
+        self.assertLessEqual(quality["farfield_upper_angular_step_ratio"], 1.000001)
+        self.assertLessEqual(quality["farfield_lower_angular_step_ratio"], 1.000001)
 
     def test_single_leading_edge_and_trailing_sizes_are_local(self) -> None:
         processed = process_airfoil(BUILTIN_NACA0012, surface_point_count=81)
@@ -179,6 +182,16 @@ class MeshArchitectTests(unittest.TestCase):
         edge = np.linalg.norm(np.diff(sampled, axis=0), axis=1)
         ratio = np.maximum(edge[1:] / edge[:-1], edge[:-1] / edge[1:])
         self.assertLessEqual(float(np.max(ratio)), 1.10)
+
+    def test_farfield_angles_are_uniform_despite_wall_clustering(self) -> None:
+        angles = _uniform_farfield_body_angles(181, 104)
+        self.assertEqual(len(angles), 181)
+        self.assertAlmostEqual(float(angles[0]), 0.5 * np.pi)
+        self.assertAlmostEqual(float(angles[104]), np.pi)
+        self.assertAlmostEqual(float(angles[-1]), 1.5 * np.pi)
+        for steps in (np.diff(angles[:105]), np.diff(angles[104:])):
+            self.assertGreater(float(np.min(steps)), 0.0)
+            self.assertLess(float(np.max(steps) / np.min(steps)), 1.0 + 1.0e-12)
 
     def test_wake_refinement_increases_only_wake_stream_density(self) -> None:
         processed = process_airfoil(BUILTIN_NACA0012, surface_point_count=50)

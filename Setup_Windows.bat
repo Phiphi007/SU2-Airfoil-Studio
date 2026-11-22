@@ -31,7 +31,7 @@ echo [3/3] Installing project dependencies...
 if errorlevel 1 goto :failed
 
 echo.
-echo Setup complete. Add SU2_CFD.exe to PATH, then run Launch_SU2_AutoFoil.bat.
+echo Setup complete. Add SU2_CFD.exe to PATH, then run Launch_SU2_Airfoil_Qt.bat.
 pause
 exit /b 0
 

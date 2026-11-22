@@ -201,6 +201,30 @@ def _wall_spacing_statistics(
     }
 
 
+def _uniform_farfield_body_angles(
+    surface_nodes: int,
+    leading_index: int,
+) -> FloatArray:
+    """Map C-grid columns to an index-uniform semicircular farfield.
+
+    Wall nodes deliberately cluster at the leading edge.  Reusing wall arc
+    length as the outer-boundary parameter carries that clustering all the way
+    to the farfield and creates alternating dense/sparse radial sectors.  The
+    block already has a smooth Hermite transition, so only the wall end should
+    retain the clustered distribution; the farfield end is equiangular on
+    each side of the unique leading-edge column.
+    """
+    if not 1 < leading_index < surface_nodes - 2:
+        raise ValueError("前缘索引不足以构造均匀远场分布。")
+    upper = np.linspace(0.5 * np.pi, np.pi, leading_index + 1)
+    lower = np.linspace(
+        np.pi,
+        1.5 * np.pi,
+        surface_nodes - leading_index,
+    )
+    return np.r_[upper, lower[1:]]
+
+
 def _resample_sharp_airfoil(
     points: FloatArray,
     chord: float,
@@ -771,16 +795,7 @@ def _build_strict_sharp_ch_grid(
     outlet_x = trailing_x + farfield_radius
 
     # 一个真实前缘索引贯通上下表面，不再在前缘附近人为切出两个控制点。
-    surface_edge = np.linalg.norm(np.diff(inner, axis=0), axis=1)
-    body_angles = np.empty(surface_nodes, dtype=float)
-    for start, stop, angle_start, angle_stop in (
-        (0, leading, 0.5 * np.pi, np.pi),
-        (leading, surface_nodes - 1, np.pi, 1.5 * np.pi),
-    ):
-        cumulative = np.r_[0.0, np.cumsum(surface_edge[start:stop])]
-        body_angles[start : stop + 1] = angle_start + (
-            angle_stop - angle_start
-        ) * cumulative / max(float(cumulative[-1]), 1.0e-300)
+    body_angles = _uniform_farfield_body_angles(surface_nodes, leading)
     outer_body = farfield_center + farfield_radius * np.column_stack(
         (np.cos(body_angles), np.sin(body_angles))
     )
@@ -1125,6 +1140,14 @@ def _build_strict_sharp_ch_grid(
         "leading_edge_radial_direction_p95_step_deg": float(
             np.percentile(front_normal_step, 95.0) if len(front_normal_step) else 0.0
         ),
+        "farfield_upper_angular_step_ratio": float(
+            np.max(np.diff(body_angles[: leading + 1]))
+            / max(np.min(np.diff(body_angles[: leading + 1])), 1.0e-300)
+        ),
+        "farfield_lower_angular_step_ratio": float(
+            np.max(np.diff(body_angles[leading:]))
+            / max(np.min(np.diff(body_angles[leading:])), 1.0e-300)
+        ),
         "trailing_upper_target_size_pct": trailing_upper_size_pct,
         "trailing_lower_target_size_pct": trailing_lower_size_pct,
         "quality_gate_minimum_angle_deg": 30.0,
@@ -1132,6 +1155,7 @@ def _build_strict_sharp_ch_grid(
         "quality_gate_minimum_leading_edge_nodes_per_side": 12,
         "quality_gate_maximum_wall_spacing_adjacent_ratio": 1.20,
         "quality_gate_maximum_leading_direction_step_deg": 8.0,
+        "quality_gate_maximum_farfield_angular_step_ratio": 1.000001,
         "wall_first_layer_max_nonorthogonality_deg": float(np.max(orthogonality)),
         "wall_first_layer_p95_nonorthogonality_deg": float(np.percentile(orthogonality, 95)),
         "first_layer_height": delta_y,

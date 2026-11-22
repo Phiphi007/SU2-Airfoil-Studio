@@ -63,6 +63,38 @@ The optimization module supports CST, D-BCE, simultaneous hybrid and CST-to-D-BC
 
 ## 快速开始 / Quick start
 
+### Qt 6 / ParaView 风格预览 / Qt 6 ParaView-style preview
+
+新版桌面层采用 ParaView 同系列的 Qt 6 交互模型：中央可视化区、Pipeline Browser、Properties、Output / Convergence Log 均可停靠和调整尺寸。数值内核仍复用已经验证的翼型、结构网格、SU2 与离散伴随模块。
+
+The new desktop layer follows ParaView's Qt 6 interaction model: a central visualization area with dockable Pipeline Browser, Properties and Output / Convergence Log panels. It reuses the validated airfoil, structured-mesh, SU2 and discrete-adjoint numerical backends.
+
+![Qt workspace](docs/images/07_qt_workspace.png)
+
+Qt 版使用与 ParaView 相同技术路线的原生 VTK Render Window：`.su2` 网格以 GPU 线框显示，`flow.vtu` 直接显示节点场，不再把超大网格交给 Matplotlib 逐线重绘。字段色阶支持稳健自动范围和用户自定义范围。
+
+The Qt edition embeds a native VTK Render Window, following the same Qt/VTK architecture used by ParaView. `.su2` meshes are rendered as GPU wireframes and `flow.vtu` point fields are displayed directly instead of redrawing large grids line by line with Matplotlib. Color limits support robust automatic and user-defined ranges.
+
+云图默认显示完整流场，也可一键定位翼型近场；支持滚轮缩放和拖动平移。弦线、来流方向与迎角圆弧可开关，信息框可选择显示翼型名、Mach、迎角、Reynolds 数和当前场变量，并可放在正上方居中、左上角或右上角。
+
+Field views open on the full domain and can switch to a near-airfoil fit in one click, with wheel zoom and drag panning. The chord, freestream direction and AoA arc are optional, as are the airfoil, Mach, AoA, Reynolds and active-field labels. The information box can be placed at top center, top left or top right.
+
+| Native mesh / 原生网格 | Native flow field / 原生流场 |
+|---|---|
+| ![Qt VTK mesh](docs/images/08_qt_vtk_mesh.png) | ![Qt VTK flow](docs/images/09_qt_vtk_flow.png) |
+
+### 真实全流程测试 / Hands-on full-workflow test
+
+2026-11-22 的人工走查从大幅 BCE 手调开始，依次验证 D-BCE 接力拟合、结构网格、SU2 求解、结果浏览和伴随配置，并为每个板块保存中英双语截图。该报告同时如实记录了强变形算例在 120 步内未收敛，因此没有把未收敛气动力用于伴随优化或精度宣传。
+
+The 2026-11-22 hands-on walkthrough starts with aggressive BCE deformation and covers D-BCE handoff, structured meshing, an SU2 run, result inspection, and adjoint setup, with bilingual screenshots for every module. It also records that the strongly deformed 120-iteration case did not converge, so its forces were not used for adjoint optimization or accuracy claims.
+
+[查看完整中英双语测试报告 / Read the complete bilingual test report](docs/FULL_UI_TEST_2026-11-22.md)
+
+| BCE design / BCE 设计 | Adjoint setup / 伴随配置 |
+|---|---|
+| ![BCE test](docs/images/ui_test_20261122/01_bce_en.png) | ![Adjoint test](docs/images/ui_test_20261122/06_adjoint_en.png) |
+
 ### 便携版（推荐）/ Portable build (recommended)
 
 1. 从 [Releases](https://github.com/Phiphi007/SU2-Airfoil-Studio/releases/latest) 下载 `SU2_AutoFoil_Optimizer_Studio_Windows_x64_v285.zip`。  
@@ -82,10 +114,10 @@ The optimization module supports CST, D-BCE, simultaneous hybrid and CST-to-D-BC
 git clone https://github.com/Phiphi007/SU2-Airfoil-Studio.git
 cd SU2-Airfoil-Studio
 .\Setup_Windows.bat
-.\Launch_SU2_AutoFoil.bat
+.\Launch_SU2_Airfoil_Qt.bat
 ```
 
-源码模式需要 Windows 10/11、Python 3.11/3.12（含 Tcl/Tk）以及可在 `PATH` 中找到的 SU2 8.x。Source mode requires Windows 10/11, Python 3.11/3.12 with Tcl/Tk, and SU2 8.x available on `PATH`.
+Qt 预览版需要 Windows 10/11、Python 3.11/3.12、PySide6 与 SU2 8.x；旧版入口 `Launch_SU2_AutoFoil.bat` 暂时保留，作为数值回归基线。The Qt preview requires Windows 10/11, Python 3.11/3.12, PySide6 and SU2 8.x. The legacy `Launch_SU2_AutoFoil.bat` remains temporarily available as a numerical regression baseline.
 
 ## BCE 与 D-BCE 原理摘要 / BCE and D-BCE at a glance
 
