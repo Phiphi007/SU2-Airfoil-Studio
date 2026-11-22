@@ -19,7 +19,7 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("SU2 Airfoil Studio")
     app.setOrganizationName("Phiphi007")
-    icon_path = resource_root() / "assets" / "branding" / "su2_airfoil_studio.ico"
+    icon_path = resource_root() / "assets" / "branding" / "su2_airfoil_studio_v3.ico"
     if icon_path.is_file():
         app.setWindowIcon(QIcon(str(icon_path)))
     apply_industrial_theme(app)
