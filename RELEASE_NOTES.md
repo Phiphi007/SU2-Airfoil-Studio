@@ -4,6 +4,7 @@
 
 ## 2026-11-23 Qt-only production update
 
+- 五个工作页统一为“翼型调整、网格生成、求解器、结果、伴随优化”；网格与云图使用独立 VTK 视图，网格禁用旋转并加入几何/参数版本感知的更新按钮，求解器恢复残差/CD/CL 实时曲线，结果页新增六种色图与黑白标注文字。The five workflow pages are now Airfoil Adjustment, Mesh Generation, Solver, Results and Adjoint Optimization; mesh and contours use separate VTK views, mesh rotation is disabled with a geometry/settings-aware update button, live residual/CD/CL curves return to Solver, and Results adds six color maps plus black/white overlay text.
 - Qt 手调 BCE 默认改为解析尖后缘 NACA0012，并以“精确目标 + BCE 增量”方式变形，消除启动/复位时的拟合形状偏差；约束后的实际几何也统一用于显示、导出和下游流程。The Qt manual BCE editor now starts from an analytic sharp-trailing-edge NACA0012 and applies BCE increments to that exact target, eliminating fitted-shape drift at startup/reset; the constrained geometry is consistently used for display, export and downstream workflows.
 - Qt 手调 BCE 补齐最新约束交互：自由变形、锁定厚度、锁定弯度、红色控制点、固定预览范围、无效几何拦截，以及直接使用/D-BCE 重拟合双出口。The Qt BCE editor restores the latest constraint workflow: free, lock-thickness and lock-camber modes, red control points, stable view limits, invalid-geometry blocking and separate direct/D-BCE exits.
 - 移除旧 Tk 启动/打包入口和 V1/V2 图标；生产入口统一为 `SU2_Airfoil_Studio_Qt.exe`。Removed obsolete Tk launch/package entry points and V1/V2 branding assets; the production entry is now the Qt executable.

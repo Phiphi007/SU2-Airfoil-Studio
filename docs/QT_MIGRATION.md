@@ -12,7 +12,7 @@ The desktop layer is being migrated to PySide6 (Qt 6) with a ParaView-style dock
 - `Properties`：随中央页面切换参数组，避免一个页面堆满控件。
 - `Output / Convergence Log`：使用 Qt 事件循环流式接收网格、SU2 和伴随输出，不弹出黑色命令窗口。
 - 中央页面：BCE 交互设计、网格、求解监控、结果和伴随优化。
-- 单一 VTK Render View：网格和流场复用一个 OpenGL 上下文，避免标签页之间的显存与上下文争用。
+- 独立二维 VTK Render View：网格固定在“网格生成”页，流场云图固定在“结果”页，避免两类数据互相覆盖。
 - `QSettings`：保存窗口、停靠布局和工作目录。
 
 - `Pipeline Browser` organizes airfoil, D-BCE handoff, mesh, direct solve, post-processing and adjoint tasks.
@@ -38,13 +38,16 @@ The desktop layer is being migrated to PySide6 (Qt 6) with a ParaView-style dock
 | Full-domain/near-airfoil camera / 全域与翼型近场相机 | Working / 可用 | VTK parallel camera + wheel zoom/pan |
 | Chord/AoA annotation / 弦线与迎角标注 | Working / 可用 | case metadata + world-space overlay |
 | Selectable result metadata / 可选结果信息框 | Working / 可用 | airfoil, Mach, AoA, Reynolds, field |
+| White/black overlay text / 黑白信息文字 | Working / 可用 | contrast-safe VTK text actor |
+| Selectable colormap / 可选云图配色 | Working / 可用 | Jet, Turbo, Viridis, Plasma, Coolwarm, gray |
+| Live convergence monitor / 实时收敛监视 | Working / 可用 | residual, CD and CL from `history.csv` |
 | CST/D-BCE/hybrid/relay adjoint / 伴随优化 | Working / 可用 | existing optimizer + SU2 AD |
 
 ## 云图交互与标注 / Field interaction and annotation
 
-VTU 结果默认采用完整数据范围定位；工具条可在 `Fit full domain` 与 `Fit airfoil` 间切换，滚轮缩放、中键拖动平移、左键拖动旋转。结果属性面板可以独立开关弦线/来流方向/迎角圆弧，并选择信息框是否显示翼型名称、Mach、迎角、Reynolds 数及当前场变量；信息框可放在正上方居中、左上角或右上角。数值读取自算例的 `case_settings.json`，任意外部 VTU 缺少元数据时不会伪造条件。
+VTU 云图独立显示在“结果”页，网格页不会再被流场覆盖。工具条可在 `Fit full domain` 与 `Fit airfoil` 间切换，二维视图使用滚轮缩放和中键平移，不提供旋转。结果属性面板可选择六种色图、自动/自定义范围、黑/白信息文字，并独立开关弦线、迎角圆弧和各项元数据；信息框可放在正上方居中、左上角或右上角。数值读取自算例的 `case_settings.json`，任意外部 VTU 缺少元数据时不会伪造条件。
 
-VTU results now open with the complete data bounds. The toolbar switches between `Fit full domain` and `Fit airfoil`; the wheel zooms, middle-drag pans and left-drag rotates. The Results property panel independently toggles the chord/freestream/AoA arc and selects whether the overlay shows airfoil name, Mach, angle of attack, Reynolds number and the active field. The overlay can be placed at top center, top left or top right. Values come from the case `case_settings.json`; no conditions are invented for external VTU files without metadata.
+VTU contours live in Results and no longer replace the mesh viewport. The toolbar switches between `Fit full domain` and `Fit airfoil`; the 2-D camera supports wheel zoom and middle-drag pan without rotation. Results controls provide six color maps, automatic/custom limits and black/white metadata text, plus independent chord/AoA and metadata toggles. The overlay can be placed at top center, top left or top right. Values come from `case_settings.json`; no conditions are invented for external VTU files without metadata.
 
 ![Full-domain VTK view with selectable metadata](images/11_vtk_full_domain_annotations.png)
 

@@ -29,7 +29,12 @@ def test_qt_workspace_and_bce_handoff(application, tmp_path: Path) -> None:
     window = MainWindow()
     window.workdir_edit.setText(str(tmp_path))
     assert window.tabs.count() == 5
-    assert window.mesh_viewer is window.result_viewer
+    assert window.mesh_viewer is not window.result_viewer
+    assert window.mesh_viewer.allow_rotation is False
+    assert window.result_display_tabs.indexOf(window.result_viewer) == 0
+    assert [window.tabs.tabText(i) for i in range(window.tabs.count())] == [
+        "Airfoil Adjustment", "Mesh Generation", "Solver", "Results", "Adjoint Optimization"
+    ]
     assert {dock.objectName() for dock in window.findChildren(QDockWidget)} == {
         "PipelineDock",
         "PropertiesDock",
@@ -63,7 +68,48 @@ def test_qt_adjoint_controls_are_connected(application) -> None:
     assert window.overlay_position.count() == 3
     assert window.overlay_position.currentData() == "top_right"
     window.overlay_position.setCurrentIndex(0)
-    assert window.scene_viewer.annotation_position == "top_center"
+    assert window.result_viewer.annotation_position == "top_center"
+    assert window.overlay_text_color.count() == 2
+    window.overlay_text_color.setCurrentIndex(window.overlay_text_color.findData("black"))
+    assert window.result_viewer.annotation_text_color == "black"
+    assert window.colormap.count() == 6
+    window.colormap.setCurrentIndex(window.colormap.findData("viridis"))
+    assert window.result_viewer.colormap_name == "viridis"
+    window.close()
+    application.processEvents()
+
+
+def test_mesh_staleness_and_live_solver_monitor(application, tmp_path: Path) -> None:
+    window = MainWindow()
+    window.workdir_edit.setText(str(tmp_path))
+    assert window.mesh_update_button.isEnabled()
+    assert window.mesh_update_button.text() == "Generate mesh"
+    window._mark_mesh_current()
+    assert not window.mesh_update_button.isEnabled()
+    assert window.mesh_update_button.text() == "Mesh up to date"
+
+    window.editor.canvas.parameters[0] += 0.002
+    window.editor.canvas._redraw()
+    application.processEvents()
+    assert window.mesh_update_button.isEnabled()
+    assert window.mesh_update_button.text() == "Airfoil changed — update mesh"
+
+    history = tmp_path / "history.csv"
+    history.write_text(
+        '"Inner_Iter","rms[Rho]","CL","CD"\n0,-3.0,0.20,0.030\n1,-4.0,0.21,0.025\n',
+        encoding="utf-8",
+    )
+    window.solver_monitor.start(history)
+    assert window.solver_monitor.refresh() == 2
+    assert window.solver_monitor.iteration_count == 2
+    assert list(window.solver_monitor.lines[0].get_ydata()) == [-3.0, -4.0]
+    assert list(window.solver_monitor.lines[1].get_ydata()) == [0.030, 0.025]
+    assert list(window.solver_monitor.lines[2].get_ydata()) == [0.20, 0.21]
+
+    window._set_language("zh")
+    assert [window.tabs.tabText(i) for i in range(window.tabs.count())] == [
+        "翼型调整", "网格生成", "求解器", "结果", "伴随优化"
+    ]
     window.close()
     application.processEvents()
 

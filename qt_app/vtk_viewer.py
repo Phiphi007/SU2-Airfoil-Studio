@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 import numpy as np
+from matplotlib import colormaps
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
@@ -26,7 +27,10 @@ try:
     )
     from vtkmodules.vtkIOImage import vtkPNGWriter
     from vtkmodules.vtkIOXML import vtkXMLUnstructuredGridReader
-    from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTrackballCamera
+    from vtkmodules.vtkInteractionStyle import (
+        vtkInteractorStyleImage,
+        vtkInteractorStyleTrackballCamera,
+    )
     from vtkmodules.vtkRenderingCore import (
         vtkActor,
         vtkBillboardTextActor3D,
@@ -46,12 +50,19 @@ except ImportError:
 VTK_ENABLED = VTK_AVAILABLE and os.environ.get("QT_QPA_PLATFORM", "").lower() != "offscreen"
 
 
-def _jet_lookup_table() -> "vtkLookupTable":
+def _lookup_table(name: str = "jet") -> "vtkLookupTable":
+    """Build a VTK lookup table from the same perceptual maps used in reports."""
+    aliases = {
+        "grayscale": "gray",
+        "grey": "gray",
+        "coolwarm": "coolwarm",
+    }
+    cmap = colormaps.get_cmap(aliases.get(name.lower(), name.lower()))
     table = vtkLookupTable()
     table.SetNumberOfTableValues(256)
-    table.SetHueRange(0.667, 0.0)
-    table.SetSaturationRange(1.0, 1.0)
-    table.SetValueRange(1.0, 1.0)
+    for index in range(256):
+        red, green, blue, alpha = cmap(index / 255.0)
+        table.SetTableValue(index, red, green, blue, alpha)
     table.SetNanColor(0.45, 0.45, 0.45, 1.0)
     table.Build()
     return table
@@ -111,8 +122,11 @@ class VTKView(QWidget):
     fieldsChanged = Signal(list)
     rangeChanged = Signal(float, float)
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, parent: QWidget | None = None, *, allow_rotation: bool = True
+    ) -> None:
         super().__init__(parent)
+        self.allow_rotation = bool(allow_rotation)
         self.source_path: Path | None = None
         self.dataset = None
         self.mapper = None
@@ -129,6 +143,8 @@ class VTKView(QWidget):
             "field": True,
         }
         self.annotation_position = "top_right"
+        self.annotation_text_color = "white"
+        self.colormap_name = "jet"
         self.show_axis = True
         self.axis_actor = None
         self.angle_actor = None
@@ -146,7 +162,11 @@ class VTKView(QWidget):
         self.xy_button.clicked.connect(self.fit_airfoil)
         tools.addWidget(self.fit_button)
         tools.addWidget(self.xy_button)
-        hint = QLabel("Wheel: zoom  ·  Middle drag: pan  ·  Left drag: rotate")
+        hint = QLabel(
+            "Wheel: zoom  ·  Middle drag: pan  ·  Left drag: rotate"
+            if self.allow_rotation
+            else "Wheel: zoom  ·  Middle drag: pan"
+        )
         hint.setProperty("muted", True)
         tools.addWidget(hint)
         tools.addStretch(1)
@@ -168,7 +188,11 @@ class VTKView(QWidget):
         self.renderer.GradientBackgroundOn()
         self.vtk_widget.GetRenderWindow().AddRenderer(self.renderer)
         self.vtk_widget.GetRenderWindow().SetMultiSamples(8)
-        self.interactor_style = vtkInteractorStyleTrackballCamera()
+        self.interactor_style = (
+            vtkInteractorStyleTrackballCamera()
+            if self.allow_rotation
+            else vtkInteractorStyleImage()
+        )
         self.vtk_widget.GetRenderWindow().GetInteractor().SetInteractorStyle(self.interactor_style)
         layout.addWidget(self.vtk_widget, 1)
         self.vtk_widget.Initialize()
@@ -197,7 +221,7 @@ class VTKView(QWidget):
         self.renderer.RemoveAllViewProps()
         mapper = vtkDataSetMapper()
         mapper.SetInputData(dataset)
-        mapper.SetLookupTable(_jet_lookup_table())
+        mapper.SetLookupTable(_lookup_table(self.colormap_name))
         mapper.ScalarVisibilityOff()
         actor = vtkActor()
         actor.SetMapper(mapper)
@@ -447,7 +471,8 @@ class VTKView(QWidget):
             else:
                 prop.SetJustificationToRight()
             prop.SetVerticalJustificationToTop()
-            prop.SetColor(0.94, 0.94, 0.94)
+            color = (0.03, 0.03, 0.03) if self.annotation_text_color == "black" else (0.96, 0.96, 0.96)
+            prop.SetColor(*color)
             prop.SetFontSize(15)
             prop.SetFontFamilyToArial()
             prop.BoldOn()
@@ -459,16 +484,31 @@ class VTKView(QWidget):
         *,
         show_axis: bool | None = None,
         position: str | None = None,
+        text_color: str | None = None,
         **items: bool,
     ) -> None:
         if show_axis is not None:
             self.show_axis = bool(show_axis)
         if position in {"top_center", "top_left", "top_right"}:
             self.annotation_position = position
+        if text_color in {"white", "black"}:
+            self.annotation_text_color = text_color
         for key, value in items.items():
             if key in self.annotation_items:
                 self.annotation_items[key] = bool(value)
         self._refresh_annotations()
+
+    def set_colormap(self, name: str) -> None:
+        normalized = str(name).lower()
+        if normalized not in {"jet", "turbo", "viridis", "plasma", "coolwarm", "grayscale"}:
+            raise ValueError(f"Unsupported colormap: {name}")
+        self.colormap_name = normalized
+        if self.mapper is not None:
+            table = _lookup_table(normalized)
+            self.mapper.SetLookupTable(table)
+            if self.scalar_bar is not None:
+                self.scalar_bar.SetLookupTable(table)
+            self._render()
 
     def _field_values(self, name: str) -> np.ndarray:
         array = self.dataset.GetPointData().GetArray(name) if self.dataset is not None else None

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime
 import csv
+import hashlib
 import json
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt, QUrl
+from PySide6.QtCore import QSettings, QTimer, Qt, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QPixmap
 from PySide6.QtWidgets import (
     QAbstractButton,
@@ -45,6 +46,7 @@ from parametric_adjoint.bridge import prepare_case_config
 from qt_app import QT_FRONTEND_VERSION
 from qt_app.airfoil_editor import AirfoilEditor
 from qt_app.backend import ApiProcess, OptimizerProcess
+from qt_app.solver_monitor import SolverConvergenceMonitor
 from qt_app.vtk_viewer import VTKView
 
 
@@ -54,16 +56,14 @@ ZH_TEXT = {
     "Open VTU result…": "打开 VTU 结果…", "Generate mesh": "生成网格", "Run CFD": "运行 CFD", "Stop": "停止",
     "Capture workspace": "截取工作区",
     "Reset layout": "重置布局", " Work directory ": " 工作目录 ", "Browse…": "浏览…",
-    "1  BCE Design": "1  BCE 设计", "2  Visualization": "2  可视化", "3  Solver": "3  求解器",
-    "4  Results": "4  结果", "5  Adjoint Optimization": "5  伴随优化",
+    "Airfoil Adjustment": "翼型调整", "Mesh Generation": "网格生成", "Solver": "求解器",
+    "Results": "结果", "Adjoint Optimization": "伴随优化",
     "Legacy BCE manual design → compact D-BCE": "旧 BCE 手动设计 → 紧支撑 D-BCE",
     "Drag gain": "拖动灵敏度", "Fine 0.35×": "精细 0.35×", "Standard 0.8×": "标准 0.8×",
     "Fast 1.5×": "快速 1.5×", "Import DAT": "导入 DAT", "Undo": "撤销", "Reset": "重置",
     "Export DAT": "导出 DAT", "Apply D-BCE": "应用 D-BCE",
     "Pipeline Browser": "流程浏览器", "Properties": "属性", "Output / Convergence Log": "输出 / 收敛日志",
-    "SU2 Airfoil Project": "SU2 翼型工程", "1  Airfoil / BCE": "1  翼型 / BCE",
-    "2  D-BCE handoff": "2  D-BCE 交接", "3  C-H mesh": "3  C-H 网格", "4  Direct SU2": "4  SU2 直接求解",
-    "5  Post-processing": "5  后处理", "6  Adjoint optimization": "6  伴随优化",
+    "SU2 Airfoil Project": "SU2 翼型工程",
     "BCE editor": "BCE 编辑器", "C-H structured mesh": "C-H 结构网格", "SU2 direct solver": "SU2 直接求解",
     "Display": "显示", "Adjoint optimization": "伴随优化", "State": "状态", "Geometry valid": "几何有效",
     "Surface points / side": "每侧表面点数", "Global refinement": "全局加密系数", "Leading-edge size": "前缘尺寸",
@@ -74,6 +74,7 @@ ZH_TEXT = {
     "Temperature [K]": "温度 [K]", "Residual target": "残差目标", "Iterations": "迭代次数", "OpenMP threads": "OpenMP 线程数",
     "Field": "场变量", "Automatic color range": "自动色阶", "Minimum": "最小值", "Maximum": "最大值",
     "Apply field / color range": "应用场变量 / 色阶", "Chord axis + AoA angle": "弦线 + 迎角标注",
+    "Colormap": "云图配色", "Overlay text color": "标注文字颜色", "White": "白色", "Black": "黑色",
     "Overlay position": "信息框位置", "Overlay: airfoil name": "显示：翼型名称", "Overlay: Mach": "显示：马赫数",
     "Overlay: angle of attack": "显示：攻角", "Overlay: Reynolds": "显示：雷诺数", "Overlay: field name": "显示：场变量",
     "Top center": "正上方居中", "Top left": "左上角", "Top right": "右上角",
@@ -85,11 +86,15 @@ ZH_TEXT = {
     "Direct-flow case": "直接流场算例", "SU2 AD bin": "SU2 AD 目录", "Select case…": "选择算例…",
     "Select SU2 bin…": "选择 SU2 目录…", "Start adjoint optimization": "开始伴随优化",
     "Minimum D-BCE half-width": "D-BCE 最小半宽", "Minimum brush support nodes": "笔刷最少支撑点",
-    "VTK visualization": "VTK 可视化", "Solver monitor": "求解监视器", "Discrete-adjoint workflow": "离散伴随工作流",
-    "No saved result image. Native mesh and flow data open in Visualization.": "尚无结果图像；网格与流场在“可视化”中显示。",
+    "2D mesh inspection": "二维网格检查", "Solver monitor": "求解监视器", "Discrete-adjoint workflow": "离散伴随工作流",
+    "Generate mesh": "生成网格", "Airfoil changed — update mesh": "翼型已修改 — 更新网格",
+    "Mesh settings changed — update mesh": "网格参数已修改 — 更新网格", "Mesh up to date": "网格已是最新",
+    "Wheel: zoom  ·  Middle drag: pan": "滚轮：缩放  ·  中键拖动：平移",
+    "No saved result image. Flow fields open in Results.": "尚无结果图像；流场云图在“结果”页显示。",
     "Run SU2 to display convergence and result files.": "运行 SU2 后显示收敛过程与结果文件。",
     "Result file": "结果文件", "Size": "大小", "Attempt": "尝试", "Stage": "阶段", "Accepted": "接受",
     "Objective": "目标值", "Trust radius": "信赖域半径", "Time (s)": "时间 (s)",
+    "Flow field": "流场云图", "Reports / files": "报告 / 文件",
 }
 
 
@@ -126,6 +131,12 @@ class MainWindow(QMainWindow):
         self.current_airfoil = "builtin://naca0012"
         self.current_case: Path | None = None
         self.optimization_output: Path | None = None
+        self._geometry_signature: str | None = None
+        self._meshed_geometry_signature: str | None = None
+        self._meshed_settings_signature: tuple | None = None
+        self._mesh_exists = False
+        self._active_backend_mode: str | None = None
+        self._active_backend_output: Path | None = None
         self._build_actions()
         self._build_menu_and_toolbar()
         self._build_central()
@@ -134,6 +145,9 @@ class MainWindow(QMainWindow):
         self._build_output_dock()
         self._build_status_bar()
         self._connect_backend()
+        self.convergence_timer = QTimer(self)
+        self.convergence_timer.setInterval(750)
+        self.convergence_timer.timeout.connect(self.solver_monitor.refresh)
         self._combo_sources: dict[int, list[str]] = {}
         self._tab_sources = [self.tabs.tabText(index) for index in range(self.tabs.count())]
         self._set_language("en")
@@ -236,6 +250,7 @@ class MainWindow(QMainWindow):
 
     def _set_language(self, language: str) -> None:
         language = "zh" if language == "zh" else "en"
+        self.ui_language = language
 
         def translated(source: str) -> str:
             return ZH_TEXT.get(source, source) if language == "zh" else source
@@ -285,6 +300,9 @@ class MainWindow(QMainWindow):
             combo.blockSignals(False)
         for index, source in enumerate(self._tab_sources):
             self.tabs.setTabText(index, translated(source))
+        if hasattr(self, "result_display_tabs"):
+            self.result_display_tabs.setTabText(0, translated("Flow field"))
+            self.result_display_tabs.setTabText(1, translated("Reports / files"))
 
         def translate_item(item: QTreeWidgetItem) -> None:
             source = item.data(0, Qt.ItemDataRole.UserRole + 10)
@@ -300,6 +318,8 @@ class MainWindow(QMainWindow):
                 translate_item(tree.topLevelItem(index))
         if hasattr(self, "editor"):
             self.editor.set_language(language)
+        if hasattr(self, "mesh_update_button") and hasattr(self, "mesh_generate_button"):
+            self._update_mesh_button_state()
 
     def _build_central(self) -> None:
         self.tabs = QTabWidget()
@@ -307,50 +327,47 @@ class MainWindow(QMainWindow):
         self.tabs.setMovable(False)
         self.setCentralWidget(self.tabs)
         self.editor = AirfoilEditor(lambda: self.workdir_edit.text(), self)
-        self.tabs.addTab(self.editor, "1  BCE Design")
-        self.scene_viewer = VTKView(self)
-        self.scene_viewer.status.connect(self._set_status)
-        self.scene_viewer.fieldsChanged.connect(self._set_result_fields)
-        self.scene_viewer.rangeChanged.connect(self._result_range_changed)
-        # ParaView-style single render context: mesh and flow replace one another.
-        self.mesh_viewer = self.scene_viewer
-        self.result_viewer = self.scene_viewer
-        self.mesh_page = self._make_vtk_page("VTK visualization", self.scene_viewer)
-        self.tabs.addTab(self.mesh_page, "2  Visualization")
-        self.solver_page = self._make_visual_page("Solver monitor", "Run SU2 to display convergence and result files.")
-        self.tabs.addTab(self.solver_page, "3  Solver")
+        self.tabs.addTab(self.editor, "Airfoil Adjustment")
+        self.mesh_viewer = VTKView(self, allow_rotation=False)
+        self.mesh_viewer.status.connect(self._set_status)
+        self.mesh_page = self._make_mesh_page(self.mesh_viewer)
+        self.tabs.addTab(self.mesh_page, "Mesh Generation")
+        self.solver_monitor = SolverConvergenceMonitor(self)
+        self.solver_page = self._make_solver_page()
+        self.tabs.addTab(self.solver_page, "Solver")
         self.results_page = self._build_results_page()
-        self.tabs.addTab(self.results_page, "4  Results")
+        self.tabs.addTab(self.results_page, "Results")
         self.optimization_page = self._build_optimization_page()
-        self.tabs.addTab(self.optimization_page, "5  Adjoint Optimization")
+        self.tabs.addTab(self.optimization_page, "Adjoint Optimization")
         self.tabs.currentChanged.connect(self._tab_changed)
         self.editor.status.connect(self._set_status)
         self.editor.geometryChanged.connect(self._geometry_changed)
         self.editor.airfoilPathChanged.connect(self._airfoil_path_changed)
 
-    def _make_visual_page(self, title: str, hint: str) -> QWidget:
+    def _make_solver_page(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(4, 4, 4, 4)
-        heading = QLabel(title)
+        heading = QLabel("Solver monitor")
         heading.setProperty("heading", True)
         layout.addWidget(heading)
-        label = QLabel(hint)
-        label.setObjectName(title.replace(" ", "") + "View")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        label.setProperty("muted", True)
-        label.setFrameShape(QFrame.Shape.StyledPanel)
-        label.setMinimumSize(500, 350)
-        layout.addWidget(label, 1)
+        layout.addWidget(self.solver_monitor, 1)
         return page
 
-    def _make_vtk_page(self, title: str, viewer: VTKView) -> QWidget:
+    def _make_mesh_page(self, viewer: VTKView) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(4, 4, 4, 4)
-        heading = QLabel(title)
+        top = QHBoxLayout()
+        heading = QLabel("2D mesh inspection")
         heading.setProperty("heading", True)
-        layout.addWidget(heading)
+        top.addWidget(heading)
+        top.addStretch(1)
+        self.mesh_update_button = QPushButton("Generate mesh")
+        self.mesh_update_button.setProperty("accent", True)
+        self.mesh_update_button.clicked.connect(lambda: self._start_backend("mesh"))
+        top.addWidget(self.mesh_update_button)
+        layout.addLayout(top)
         layout.addWidget(viewer, 1)
         return page
 
@@ -358,9 +375,18 @@ class MainWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(4, 4, 4, 4)
+        self.result_viewer = VTKView(self, allow_rotation=False)
+        self.result_viewer.status.connect(self._set_status)
+        self.result_viewer.fieldsChanged.connect(self._set_result_fields)
+        self.result_viewer.rangeChanged.connect(self._result_range_changed)
+        self.result_display_tabs = QTabWidget()
+        self.result_display_tabs.addTab(self.result_viewer, "Flow field")
+        report_page = QWidget()
+        report_layout = QVBoxLayout(report_page)
+        report_layout.setContentsMargins(0, 0, 0, 0)
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.result_image = QLabel(
-            "No saved result image. Native mesh and flow data open in Visualization."
+            "No saved report image. Flow fields open in this Results page."
         )
         self.result_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.result_image.setFrameShape(QFrame.Shape.StyledPanel)
@@ -373,7 +399,9 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self.result_files)
         splitter.setStretchFactor(0, 4)
         splitter.setStretchFactor(1, 1)
-        layout.addWidget(splitter, 1)
+        report_layout.addWidget(splitter, 1)
+        self.result_display_tabs.addTab(report_page, "Reports / files")
+        layout.addWidget(self.result_display_tabs, 1)
         return page
 
     def _build_optimization_page(self) -> QWidget:
@@ -416,12 +444,11 @@ class MainWindow(QMainWindow):
         root = QTreeWidgetItem(["SU2 Airfoil Project"])
         root.setExpanded(True)
         for text in (
-            "1  Airfoil / BCE",
-            "2  D-BCE handoff",
-            "3  C-H mesh",
-            "4  Direct SU2",
-            "5  Post-processing",
-            "6  Adjoint optimization",
+            "Airfoil Adjustment",
+            "Mesh Generation",
+            "Solver",
+            "Results",
+            "Adjoint Optimization",
         ):
             root.addChild(QTreeWidgetItem([text]))
         self.pipeline.addTopLevelItem(root)
@@ -500,10 +527,25 @@ class MainWindow(QMainWindow):
             ("Farfield cell size", self.farfield_size),
         ):
             form.addRow(label, widget)
-        button = QPushButton("Generate mesh")
-        button.setProperty("accent", True)
-        button.clicked.connect(lambda: self._start_backend("mesh"))
-        form.addRow(button)
+        self.mesh_generate_button = QPushButton("Generate mesh")
+        self.mesh_generate_button.setProperty("accent", True)
+        self.mesh_generate_button.clicked.connect(lambda: self._start_backend("mesh"))
+        form.addRow(self.mesh_generate_button)
+        for widget in (
+            self.surface_points,
+            self.global_refinement,
+            self.leading_edge_size,
+            self.trailing_upper_size,
+            self.trailing_lower_size,
+            self.wake_refinement,
+            self.y_plus,
+            self.farfield,
+            self.domain_scale,
+            self.growth_ratio,
+            self.bl_thickness,
+            self.farfield_size,
+        ):
+            widget.valueChanged.connect(self._update_mesh_button_state)
         return page
 
     def _solver_properties(self) -> QWidget:
@@ -569,6 +611,23 @@ class MainWindow(QMainWindow):
         self.overlay_position.addItem("Top right", "top_right")
         self.overlay_position.setCurrentIndex(2)
         form.addRow("Overlay position", self.overlay_position)
+        self.overlay_text_color = QComboBox()
+        self.overlay_text_color.addItem("White", "white")
+        self.overlay_text_color.addItem("Black", "black")
+        form.addRow("Overlay text color", self.overlay_text_color)
+        self.overlay_text_color.currentIndexChanged.connect(self._update_result_annotations)
+        self.colormap = QComboBox()
+        for label, value in (
+            ("Jet", "jet"),
+            ("Turbo", "turbo"),
+            ("Viridis", "viridis"),
+            ("Plasma", "plasma"),
+            ("Coolwarm", "coolwarm"),
+            ("Grayscale", "grayscale"),
+        ):
+            self.colormap.addItem(label, value)
+        form.addRow("Colormap", self.colormap)
+        self.colormap.currentIndexChanged.connect(self._update_colormap)
         self.overlay_position.currentIndexChanged.connect(self._update_result_annotations)
         for widget, checked in (
             (self.overlay_airfoil, True),
@@ -586,16 +645,20 @@ class MainWindow(QMainWindow):
         self._range_mode_changed(True)
         return page
 
-    def _update_result_annotations(self) -> None:
-        self.scene_viewer.set_annotations(
+    def _update_result_annotations(self, *_args) -> None:
+        self.result_viewer.set_annotations(
             show_axis=self.show_axis.isChecked(),
             position=self.overlay_position.currentData(),
+            text_color=self.overlay_text_color.currentData(),
             airfoil=self.overlay_airfoil.isChecked(),
             mach=self.overlay_mach.isChecked(),
             aoa=self.overlay_aoa.isChecked(),
             reynolds=self.overlay_reynolds.isChecked(),
             field=self.overlay_field.isChecked(),
         )
+
+    def _update_colormap(self, *_args) -> None:
+        self.result_viewer.set_colormap(str(self.colormap.currentData()))
 
     def _optimization_properties(self) -> QWidget:
         page, form = self._panel("Adjoint optimization")
@@ -826,6 +889,7 @@ class MainWindow(QMainWindow):
         self.action_mesh.setEnabled(not running and not self.backend.running)
         self.action_solve.setEnabled(not running and not self.backend.running)
         self.action_stop.setEnabled(running or self.backend.running)
+        self._update_mesh_button_state()
         if not running:
             self.progress.setRange(0, 100)
 
@@ -879,7 +943,8 @@ class MainWindow(QMainWindow):
         if not path:
             return
         try:
-            self.scene_viewer.load_su2(path)
+            self.mesh_viewer.load_su2(path)
+            self._mark_mesh_current()
             self.tabs.setCurrentIndex(1)
         except Exception as exc:
             QMessageBox.critical(self, "Mesh display failed", str(exc))
@@ -891,8 +956,9 @@ class MainWindow(QMainWindow):
         if not path:
             return
         try:
-            self.scene_viewer.load_vtu(path)
-            self.tabs.setCurrentIndex(1)
+            self.result_viewer.load_vtu(path)
+            self.result_display_tabs.setCurrentIndex(0)
+            self.tabs.setCurrentIndex(3)
         except Exception as exc:
             QMessageBox.critical(self, "VTU display failed", str(exc))
 
@@ -904,13 +970,83 @@ class MainWindow(QMainWindow):
         if parent is None:
             return
         index = parent.indexOfChild(item)
-        mapping = (0, 0, 1, 2, 3, 4)
-        self.tabs.setCurrentIndex(mapping[index])
+        self.tabs.setCurrentIndex(index)
 
-    def _geometry_changed(self, _x, upper, lower) -> None:
+    @staticmethod
+    def _geometry_digest(x, upper, lower) -> str:
+        digest = hashlib.sha256()
+        for values in (x, upper, lower):
+            digest.update(memoryview(values.astype("<f8", copy=False)))
+        return digest.hexdigest()
+
+    def _mesh_settings_signature(self) -> tuple | None:
+        if not hasattr(self, "surface_points"):
+            return None
+        return tuple(self._parameters()[name] for name in (
+            "surface_points",
+            "global_refinement",
+            "leading_edge_size",
+            "trailing_upper_size",
+            "trailing_lower_size",
+            "wake_refinement",
+            "y_plus",
+            "farfield",
+            "domain_scale",
+            "growth_ratio",
+            "boundary_layer_thickness",
+            "farfield_size",
+        ))
+
+    def _update_mesh_button_state(self, *_args) -> None:
+        if not hasattr(self, "mesh_update_button") or not hasattr(self, "mesh_generate_button"):
+            return
+        geometry_stale = (
+            self._mesh_exists
+            and self._meshed_geometry_signature != self._geometry_signature
+        )
+        settings_stale = (
+            self._mesh_exists
+            and self._meshed_settings_signature != self._mesh_settings_signature()
+        )
+        if not self._mesh_exists:
+            source = "Generate mesh"
+            enabled = True
+            accent = True
+        elif geometry_stale:
+            source = "Airfoil changed — update mesh"
+            enabled = True
+            accent = True
+        elif settings_stale:
+            source = "Mesh settings changed — update mesh"
+            enabled = True
+            accent = True
+        else:
+            source = "Mesh up to date"
+            enabled = False
+            accent = False
+        text = ZH_TEXT.get(source, source) if getattr(self, "ui_language", "en") == "zh" else source
+        busy = self.backend.running or self.optimizer.running
+        for button in (self.mesh_update_button, self.mesh_generate_button):
+            button.setText(text)
+            button.setProperty("accent", accent)
+            button.setEnabled(enabled and not busy)
+            button.style().unpolish(button)
+            button.style().polish(button)
+
+    def _mark_mesh_current(self) -> None:
+        self._mesh_exists = True
+        self._meshed_geometry_signature = self._geometry_signature
+        self._meshed_settings_signature = self._mesh_settings_signature()
+        self._update_mesh_button_state()
+
+    def _geometry_changed(self, x, upper, lower) -> None:
         thickness = float((upper - lower).max())
         minimum = float((upper[2:-2] - lower[2:-2]).min())
         self.geometry_valid_label.setText(f"t/c max={thickness:.5f} | min={minimum:.5f}")
+        signature = self._geometry_digest(x, upper, lower)
+        if signature != self._geometry_signature:
+            self._geometry_signature = signature
+            self._update_mesh_button_state()
 
     def _airfoil_path_changed(self, path: str) -> None:
         self.current_airfoil = path
@@ -956,6 +1092,8 @@ class MainWindow(QMainWindow):
             return
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output = workdir / f"Qt_{mode}_{stamp}"
+        self._active_backend_mode = mode
+        self._active_backend_output = output
         request = {
             "api_version": 1,
             "mode": mode,
@@ -965,6 +1103,10 @@ class MainWindow(QMainWindow):
         }
         self._log("REQUEST " + json.dumps(request, ensure_ascii=False))
         self.progress.setRange(0, 0)
+        if mode == "solve":
+            self.solver_monitor.start(output / "history.csv")
+            self.convergence_timer.start()
+            self.tabs.setCurrentIndex(2)
         try:
             self.backend.start_request(request)
         except Exception as exc:
@@ -976,6 +1118,7 @@ class MainWindow(QMainWindow):
         self.action_mesh.setEnabled(not running and not self.optimizer.running)
         self.action_solve.setEnabled(not running and not self.optimizer.running)
         self.action_stop.setEnabled(running or self.optimizer.running)
+        self._update_mesh_button_state()
         if not running:
             self.progress.setRange(0, 100)
 
@@ -988,13 +1131,24 @@ class MainWindow(QMainWindow):
         self._log(json.dumps(result.get("last_values", {}), ensure_ascii=False, indent=2))
         self._populate_results(result)
         mode = result.get("mode")
-        self.tabs.setCurrentIndex(1)
+        if mode in {"mesh", "solve"}:
+            self._mark_mesh_current()
+        if mode == "solve":
+            self.convergence_timer.stop()
+            self.solver_monitor.finish(result.get("last_values", {}))
+            self.tabs.setCurrentIndex(3)
+        else:
+            self.tabs.setCurrentIndex(1)
+        self._active_backend_mode = None
 
     def _backend_failed(self, message: str) -> None:
+        self.convergence_timer.stop()
+        self.solver_monitor.refresh()
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         self._set_status("Task failed")
         self._log("ERROR: " + message)
+        self._active_backend_mode = None
         QMessageBox.critical(self, "Task failed", message)
 
     def _populate_results(self, result: dict) -> None:
@@ -1022,19 +1176,16 @@ class MainWindow(QMainWindow):
         if flow_path is not None:
             try:
                 self.result_viewer.load_vtu(flow_path)
-                self.tabs.setCurrentIndex(1)
+                self.result_display_tabs.setCurrentIndex(0)
             except Exception as exc:
                 self._log(f"VTK field display failed: {exc}")
         preferred = next((p for p in images if "Contour" in p.name), None)
         preferred = preferred or next((p for p in images if "Convergence" in p.name), None)
         preferred = preferred or (images[0] if images else None)
         if preferred:
-            self._show_image(preferred)
-        solver_label = self.solver_page.findChild(QLabel, "SolvermonitorView")
-        if solver_label:
-            solver_label.setText(f"Last values\n{json.dumps(result.get('last_values', {}), indent=2)[-3000:]}")
+            self._show_image(preferred, switch=flow_path is None)
 
-    def _show_image(self, path: Path) -> None:
+    def _show_image(self, path: Path, *, switch: bool = True) -> None:
         pixmap = QPixmap(str(path))
         if pixmap.isNull():
             return
@@ -1044,6 +1195,9 @@ class MainWindow(QMainWindow):
         target.setHeight(max(1, target.height() - margins.top() - margins.bottom()))
         self.result_image.setPixmap(pixmap.scaled(target, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         self.result_image.setToolTip(str(path))
+        if switch:
+            self.result_display_tabs.setCurrentIndex(1)
+            self.tabs.setCurrentIndex(3)
 
     def _open_result_item(self, item: QTreeWidgetItem) -> None:
         path = Path(item.data(0, Qt.ItemDataRole.UserRole))
@@ -1052,12 +1206,14 @@ class MainWindow(QMainWindow):
         elif path.suffix.lower() == ".vtu":
             try:
                 self.result_viewer.load_vtu(path)
-                self.tabs.setCurrentIndex(1)
+                self.result_display_tabs.setCurrentIndex(0)
+                self.tabs.setCurrentIndex(3)
             except Exception as exc:
                 QMessageBox.critical(self, "VTU display failed", str(exc))
         elif path.suffix.lower() == ".su2":
             try:
                 self.mesh_viewer.load_su2(path)
+                self._mark_mesh_current()
                 self.tabs.setCurrentIndex(1)
             except Exception as exc:
                 QMessageBox.critical(self, "Mesh display failed", str(exc))
@@ -1096,7 +1252,8 @@ class MainWindow(QMainWindow):
         try:
             limits = None if self.auto_range.isChecked() else (self.range_min.value(), self.range_max.value())
             self.result_viewer.set_field(name, auto=self.auto_range.isChecked(), limits=limits)
-            self.tabs.setCurrentIndex(1)
+            self.result_display_tabs.setCurrentIndex(0)
+            self.tabs.setCurrentIndex(3)
         except Exception as exc:
             QMessageBox.critical(self, "Color range failed", str(exc))
 
@@ -1112,7 +1269,7 @@ class MainWindow(QMainWindow):
 
     def _capture_workspace(self) -> None:
         """Save a lossless, full-window UI capture for reports and support."""
-        labels = ("bce", "visualization", "solver", "results", "adjoint")
+        labels = ("airfoil", "mesh", "solver", "results", "adjoint")
         page = labels[self.tabs.currentIndex()] if self.tabs.currentIndex() < len(labels) else "workspace"
         language = str(self.language_combo.currentData() or "en")
         directory = Path(self.workdir_edit.text()).expanduser() / "screenshots"

@@ -64,9 +64,9 @@ The manual geometry becomes the exact downstream baseline; compact brushes defin
 
 ### 4. 翼型预处理与网格 / Geometry preparation and mesh
 
-设置每侧采样点、全局加密系数和流场域缩放。全局加密支持粗网格流程检查，也支持更密的验证网格；界面实时估算总网格量。生成后在内嵌 VTK 视图中检查前缘点数、壁面切向间距、首层高度、径向增长率、块接口、最小 Jacobian 和最大纵横比。
+设置每侧采样点、全局加密系数和流场域缩放。全局加密支持粗网格流程检查，也支持更密的验证网格；界面实时估算总网格量。网格视图采用固定二维相机，只允许缩放和平移，不提供会破坏二维检查方向的旋转。生成网格后按钮变灰；翼型或网格参数改变时按钮会高亮提示重新生成。生成后检查前缘点数、壁面切向间距、首层高度、径向增长率、块接口、最小 Jacobian 和最大纵横比。
 
-Set points per surface, global refinement and farfield scale. Global refinement spans coarse workflow checks through denser validation meshes, and the estimated cell count is shown before generation. Inspect leading-edge resolution, tangential spacing, first-layer height, radial growth, block interfaces, minimum Jacobian and maximum aspect ratio in the embedded VTK view.
+Set points per surface, global refinement and farfield scale. Global refinement spans coarse workflow checks through denser validation meshes, and the estimated cell count is shown before generation. The mesh view uses a fixed 2-D camera with zoom and pan only. Its update button is disabled when the mesh matches the current geometry/settings and highlighted after either changes. Inspect leading-edge resolution, tangential spacing, first-layer height, radial growth, block interfaces, minimum Jacobian and maximum aspect ratio in the embedded VTK view.
 
 | 全场 / Full domain | 前缘 / Leading edge |
 |---|---|
@@ -88,9 +88,9 @@ Enter Mach, Reynolds number, angle of attack, turbulence model, CFL, iterations 
 
 ### 6. 云图、压力与报告 / Contours, pressure and report
 
-内嵌 VTK 结果页可显示 Mach、Pressure、Cp 等变量，支持自动色阶或手动最小/最大值、缩放、平移和全域重置。可以打开翼型轴线与攻角弧线，并在正上方、左上角或右上角显示翼型名称、Mach、Re、攻角等注释。压力分布、残差、气动力、Y+、Cf 和几何检查可导出到气动报告。
+云图 VTK 视图位于“结果”页，不再占用网格页。它可显示 Mach、Pressure、Cp 等变量，支持 Jet、Turbo、Viridis、Plasma、Coolwarm、灰度六种配色，自动色阶或手动最小/最大值，以及缩放、平移和全域重置。可以打开翼型轴线与攻角弧线，并在正上方、左上角或右上角显示翼型名称、Mach、Re、攻角等注释；参数文字可切换白色或黑色以适配明暗背景。压力分布、残差、气动力、Y+、Cf 和几何检查可导出到气动报告。
 
-The embedded VTK result page displays Mach, pressure, Cp and other arrays with automatic or manual color limits, zoom, pan and full-domain reset. Enable the chord axis and AoA arc, and place airfoil name, Mach, Reynolds and AoA annotations at top-center, top-left or top-right. Pressure distribution, residuals, forces, Y+, Cf and geometry checks can be exported to the aerodynamic report.
+The VTK contour view lives in Results rather than replacing the mesh view. It displays Mach, pressure, Cp and other arrays with Jet, Turbo, Viridis, Plasma, Coolwarm or grayscale maps, automatic/manual limits, zoom, pan and full-domain reset. Enable the chord axis and AoA arc, place metadata at top-center, top-left or top-right, and switch its text between white and black for contrast. Pressure distribution, residuals, forces, Y+, Cf and geometry checks can be exported to the aerodynamic report.
 
 ![Full-domain VTK annotations](docs/images/11_vtk_full_domain_annotations.png)
 

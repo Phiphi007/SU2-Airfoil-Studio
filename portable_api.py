@@ -221,7 +221,12 @@ def main(argv: list[str] | None = None) -> int:
                 try:
                     window.show()
                     app.processEvents()
-                    if window.tabs.count() != 5 or window.mesh_viewer is not window.result_viewer:
+                    if (
+                        window.tabs.count() != 5
+                        or window.mesh_viewer is window.result_viewer
+                        or window.result_display_tabs.indexOf(window.result_viewer) != 0
+                        or len(window.solver_monitor.lines) != 3
+                    ):
                         raise RuntimeError("Qt workspace initialization failed.")
                 finally:
                     window.close()

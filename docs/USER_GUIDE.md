@@ -91,6 +91,8 @@ The application provides two starting points:
 
 参数区会先显示预计节点和四边形数量。生成时进度条依次显示几何处理、拓扑构建、质量搜索、写文件和内嵌预览。The panel estimates nodes and quads before generation; the progress bar covers geometry, topology, quality search, writing and embedded preview.
 
+网格预览为严格二维交互：滚轮缩放、中键拖动平移，不提供旋转。网格与当前翼型/参数一致时“网格已是最新”按钮变灰；翼型或网格参数改变后按钮高亮并提示更新。The mesh preview is strictly two-dimensional: wheel zoom and middle-drag pan are available, but rotation is disabled. The update button is disabled while the mesh matches the current geometry/settings and highlighted after either changes.
+
 ### 质量判定 / Quality gate
 
 生成后至少检查：After generation, inspect at least:
@@ -133,13 +135,13 @@ The application provides two starting points:
 - `继续 / Resume`：从暂停位置恢复。Resumes it.
 - `终止 / Stop`：停止计算，但保留最后有效迭代。Stops while preserving the last valid iteration.
 
-实时日志与实时收敛位于同一页面。不要仅凭进度条或 SU2 返回码判断可信度；必须检查密度、动量、能量和湍流残差以及 CL/CD 尾窗。Live logs and convergence share one page. Do not judge validity from the progress bar or exit code alone; inspect all residuals and the CL/CD tail window.
+求解器页同时显示密度残差、CD 和 CL 三条实时曲线；底部日志保持可见。曲线直接增量读取 SU2 写出的 `history.csv`，不依赖控制台窗口。不要仅凭进度条或 SU2 返回码判断可信度；必须检查残差以及 CL/CD 尾窗。The Solver page shows live density-residual, CD and CL curves while the bottom log remains visible. Curves incrementally read SU2's flushed `history.csv` and do not depend on a console window. Do not judge validity from the progress bar or exit code alone; inspect residuals and the CL/CD tail window.
 
 ### 云图 / Contours
 
 ![Converged Mach contour](images/04_converged_mach_contour.png)
 
-选择 Mach、Pressure、Pressure Coefficient、Temperature、Velocity、Y+ 等场量。`自动范围` 根据有效节点决定上下限；关闭后可输入自定义最小/最大值。Choose a field and use automatic limits or enter custom bounds.
+云图只显示在“结果”页，网格页保持独立。选择 Mach、Pressure、Pressure Coefficient、Temperature、Velocity、Y+ 等场量，并可切换 Jet、Turbo、Viridis、Plasma、Coolwarm 或灰度配色。`自动范围` 根据有效节点决定上下限；关闭后可输入自定义最小/最大值。右上角参数文字可选白色或黑色，并可放置在正上方、左上角或右上角。The contour lives only in Results, leaving the mesh page independent. Select a field and one of six color maps, then use automatic limits or custom bounds. Overlay text can be white or black and positioned at top-center, top-left or top-right.
 
 界面使用高分辨率光栅化、四边形中心细分和保梯度显示平滑来改善拖动流畅度与前缘锯齿。它不修改原始数值；定量分析应读取 CSV/VTU。The UI uses rasterization, center refinement and edge-aware display smoothing. Quantitative analysis must use the raw CSV/VTU files.
 
