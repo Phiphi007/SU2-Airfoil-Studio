@@ -78,9 +78,9 @@ Existing Pointwise or Gmsh `.su2` meshes can be imported directly. Boundary name
 
 ### 5. 求解设置与计算监视 / Solver setup and monitoring
 
-输入 Mach、Reynolds、攻角、湍流模型、CFL、迭代数和收敛门槛。点击开始后，日志与实时残差/CL/CD 在同一页面更新；可以暂停、继续或终止。程序不会因为进程正常退出就自动宣称收敛，还会检查最终残差和末段气动力窗口。
+输入 Mach、Reynolds、攻角、湍流模型、CFL、迭代数和收敛门槛。点击开始后，日志与实时残差/CL/CD 在同一页面更新；可以暂停/继续、立即结束，或等待下一保存周期完成后结束。保存周期模式会确认流场/重启文件已经稳定落盘，等待时仍可改为立即结束。程序不会因为进程正常退出就自动宣称收敛，还会检查最终残差和末段气动力窗口。
 
-Enter Mach, Reynolds number, angle of attack, turbulence model, CFL, iterations and convergence thresholds. Logs and live residual/CL/CD plots update on one page; the process can be paused, resumed or stopped. A normal process exit is not automatically labeled converged: final residual and late force windows are checked as well.
+Enter Mach, Reynolds number, angle of attack, turbulence model, CFL, iterations and convergence thresholds. Logs and live residual/CL/CD plots update on one page. Pause/resume the actual SU2 process, stop immediately, or stop after the next saved-output cycle has completed and its flow/restart files are stable. Immediate stop remains available while a checkpoint stop is pending. A normal process exit is not automatically labeled converged: final residual and late force windows are checked as well.
 
 | 中文 / Chinese | English |
 |---|---|

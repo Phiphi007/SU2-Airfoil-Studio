@@ -32,6 +32,9 @@ def test_qt_workspace_and_bce_handoff(application, tmp_path: Path) -> None:
     assert window.mesh_viewer is not window.result_viewer
     assert window.mesh_viewer.allow_rotation is False
     assert window.result_display_tabs.indexOf(window.result_viewer) == 0
+    assert not window.solver_pause_button.isEnabled()
+    assert not window.solver_stop_now_button.isEnabled()
+    assert not window.solver_stop_saved_button.isEnabled()
     assert [window.tabs.tabText(i) for i in range(window.tabs.count())] == [
         "Airfoil Adjustment", "Mesh Generation", "Solver", "Results", "Adjoint Optimization"
     ]
@@ -105,6 +108,20 @@ def test_mesh_staleness_and_live_solver_monitor(application, tmp_path: Path) -> 
     assert list(window.solver_monitor.lines[0].get_ydata()) == [-3.0, -4.0]
     assert list(window.solver_monitor.lines[1].get_ydata()) == [0.030, 0.025]
     assert list(window.solver_monitor.lines[2].get_ydata()) == [0.20, 0.21]
+
+    window._solver_is_active = lambda: True
+    window.backend.send_control = lambda _command: True
+    window._update_solver_controls()
+    assert window.solver_pause_button.isEnabled()
+    assert window.solver_stop_now_button.isEnabled()
+    assert window.solver_stop_saved_button.isEnabled()
+    window._toggle_solver_pause()
+    assert window._solver_paused
+    assert window.solver_pause_button.text() == "Resume"
+    window._stop_solver_after_save()
+    assert window._solver_stop_pending
+    assert not window.solver_pause_button.isEnabled()
+    assert window.solver_stop_now_button.isEnabled()
 
     window._set_language("zh")
     assert [window.tabs.tabText(i) for i in range(window.tabs.count())] == [

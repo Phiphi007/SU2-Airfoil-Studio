@@ -84,12 +84,12 @@ class SolverConvergenceMonitor(QWidget):
         self.canvas.draw_idle()
         return len(points)
 
-    def finish(self, last_values: dict | None = None) -> None:
+    def finish(self, last_values: dict | None = None, state: str = "Completed") -> None:
         self.refresh()
         if self.iterations:
-            self.summary.setText("Completed  |  " + self.summary.text())
+            self.summary.setText(state + "  |  " + self.summary.text())
         elif last_values:
             rendered = "  |  ".join(f"{key}={value}" for key, value in last_values.items())
-            self.summary.setText("Completed  |  " + rendered)
+            self.summary.setText(state + "  |  " + rendered)
         else:
-            self.summary.setText("Completed without readable convergence history")
+            self.summary.setText(state + " without readable convergence history")

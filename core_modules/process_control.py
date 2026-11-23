@@ -50,6 +50,7 @@ class ProcessController:
         self._pause_requested = False
         self._paused = False
         self._termination_requested = False
+        self._stop_mode: str | None = None
 
     @property
     def pause_requested(self) -> bool:
@@ -65,6 +66,11 @@ class ProcessController:
     def termination_requested(self) -> bool:
         with self._lock:
             return self._termination_requested
+
+    @property
+    def stop_mode(self) -> str | None:
+        with self._lock:
+            return self._stop_mode
 
     @property
     def has_active_process(self) -> bool:
@@ -118,9 +124,10 @@ class ProcessController:
             self._paused = False
             return True
 
-    def terminate(self) -> bool:
+    def terminate(self, mode: str = "immediate") -> bool:
         """请求终止；若当前有子进程则立即结束，返回是否发出了结束信号。"""
         with self._lock:
+            self._stop_mode = mode
             self._termination_requested = True
             self._pause_requested = False
             process = self._process

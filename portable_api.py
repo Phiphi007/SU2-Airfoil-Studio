@@ -136,6 +136,9 @@ def result_files(output: Path) -> dict:
 
 def execute(request: dict) -> tuple[dict, int]:
     from main_pipeline import run_pipeline
+    from core_modules.process_control import ProcessController
+    from core_modules.solver_control import SolverControlMonitor
+    from core_modules.su2_driver import CalculationCancelled
     args, mode, output = parse_request(request)
     if mode != "report":
         # The exclusive creation also protects simultaneous API calls using the same path.
@@ -146,6 +149,10 @@ def execute(request: dict) -> tuple[dict, int]:
     response = {"api_version": API_VERSION, "version": VERSION, "mode": mode,
                 "output_dir": str(output), "ok": True, "status": "completed"}
     exit_code = 0
+    controller = ProcessController()
+    monitor = SolverControlMonitor(output, controller) if mode == "solve" else None
+    if monitor:
+        monitor.start()
     with (output / "api_run.log").open("a", encoding="utf-8") as log:
         class Progress:
             def write(self, message):
@@ -161,11 +168,19 @@ def execute(request: dict) -> tuple[dict, int]:
 
         try:
             with redirect_stdout(Progress()):
-                report = run_pipeline(args)
+                report = run_pipeline(args, process_control=controller)
             response["report"] = str(report) if report else None
+        except CalculationCancelled:
+            response["status"] = (
+                "stopped_after_save" if controller.stop_mode == "after_save" else "stopped"
+            )
+            response["stop_mode"] = controller.stop_mode or "immediate"
         except Exception as exc:
             response.update(ok=False, status="failed", error={"type": type(exc).__name__, "message": str(exc)})
             exit_code = 1
+        finally:
+            if monitor:
+                monitor.close()
     values = read_last_values(output)
     response["last_values"] = values
     residual = next((values[k] for k in ("rms[Rho]", "RMS_Density", "RMS_Rho", "Res_Density") if k in values), None)

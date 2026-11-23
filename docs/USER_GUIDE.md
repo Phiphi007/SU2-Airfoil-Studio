@@ -131,9 +131,12 @@ The application provides two starting points:
 
 点击“开始计算”后，程序在后台依次保存几何、生成/复制网格、写配置、运行 SU2、解析结果和生成报告。The run executes in the background: geometry, mesh, configuration, SU2, parsing and reports.
 
-- `暂停 / Pause`：挂起当前子进程。Suspends the active process.
-- `继续 / Resume`：从暂停位置恢复。Resumes it.
-- `终止 / Stop`：停止计算，但保留最后有效迭代。Stops while preserving the last valid iteration.
+- `暂停 / Pause`：直接挂起 SU2 子进程；按钮随后变为“继续”。Suspends the actual SU2 child process; the button changes to Resume.
+- `继续 / Resume`：从暂停迭代恢复。Resumes from the paused iteration.
+- `立即结束 / Stop now`：立即终止 SU2，保留此前已经写入磁盘的结果。Stops SU2 immediately and preserves files already written.
+- `保存周期结束 / Stop after save`：若当前输出频率为 100 步，则等待下一个 100 步边界，并确认流场/重启文件稳定写完后结束。Waits for the next 100-iteration output boundary and stable flow/restart files before stopping.
+
+“保存周期结束”发出后会自动解除暂停，防止永远无法到达下一个保存点；等待期间仍可改用“立即结束”。Stop-after-save automatically resumes a paused solver so it can reach the next checkpoint; Stop now remains available while waiting.
 
 求解器页同时显示密度残差、CD 和 CL 三条实时曲线；底部日志保持可见。曲线直接增量读取 SU2 写出的 `history.csv`，不依赖控制台窗口。不要仅凭进度条或 SU2 返回码判断可信度；必须检查残差以及 CL/CD 尾窗。The Solver page shows live density-residual, CD and CL curves while the bottom log remains visible. Curves incrementally read SU2's flushed `history.csv` and do not depend on a console window. Do not judge validity from the progress bar or exit code alone; inspect residuals and the CL/CD tail window.
 

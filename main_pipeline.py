@@ -127,7 +127,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_pipeline(args: argparse.Namespace) -> Path | None:
+def run_pipeline(args: argparse.Namespace, process_control=None) -> Path | None:
     output_dir = Path(args.output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -213,6 +213,7 @@ def run_pipeline(args: argparse.Namespace) -> Path | None:
         output_dir=output_dir,
         threads=args.threads,
         log_callback=print,
+        process_control=process_control,
     )
     if args.skip_report:
         print("[5/5] --skip-report 已启用，流程结束。")

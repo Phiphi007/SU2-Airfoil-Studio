@@ -54,6 +54,8 @@ ZH_TEXT = {
     "File": "文件", "Run": "运行", "View": "视图", "Help": "帮助", "About": "关于",
     "Open airfoil…": "打开翼型…", "Export airfoil…": "导出翼型…", "Open SU2 mesh…": "打开 SU2 网格…",
     "Open VTU result…": "打开 VTU 结果…", "Generate mesh": "生成网格", "Run CFD": "运行 CFD", "Stop": "停止",
+    "Pause": "暂停", "Resume": "继续", "Stop now": "立即结束", "Stop after save": "保存周期结束",
+    "Waiting for next saved output cycle": "等待下一保存周期完成",
     "Capture workspace": "截取工作区",
     "Reset layout": "重置布局", " Work directory ": " 工作目录 ", "Browse…": "浏览…",
     "Airfoil Adjustment": "翼型调整", "Mesh Generation": "网格生成", "Solver": "求解器",
@@ -137,6 +139,8 @@ class MainWindow(QMainWindow):
         self._mesh_exists = False
         self._active_backend_mode: str | None = None
         self._active_backend_output: Path | None = None
+        self._solver_paused = False
+        self._solver_stop_pending = False
         self._build_actions()
         self._build_menu_and_toolbar()
         self._build_central()
@@ -320,6 +324,7 @@ class MainWindow(QMainWindow):
             self.editor.set_language(language)
         if hasattr(self, "mesh_update_button") and hasattr(self, "mesh_generate_button"):
             self._update_mesh_button_state()
+        self._update_solver_controls()
 
     def _build_central(self) -> None:
         self.tabs = QTabWidget()
@@ -350,9 +355,72 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(4, 4, 4, 4)
         heading = QLabel("Solver monitor")
         heading.setProperty("heading", True)
-        layout.addWidget(heading)
+        controls = QHBoxLayout()
+        controls.addWidget(heading)
+        controls.addStretch(1)
+        self.solver_pause_button = QPushButton("Pause")
+        self.solver_stop_now_button = QPushButton("Stop now")
+        self.solver_stop_saved_button = QPushButton("Stop after save")
+        self.solver_stop_now_button.setProperty("danger", True)
+        self.solver_stop_saved_button.setProperty("accent", True)
+        self.solver_pause_button.clicked.connect(self._toggle_solver_pause)
+        self.solver_stop_now_button.clicked.connect(self._stop_solver_now)
+        self.solver_stop_saved_button.clicked.connect(self._stop_solver_after_save)
+        for button in (
+            self.solver_pause_button,
+            self.solver_stop_now_button,
+            self.solver_stop_saved_button,
+        ):
+            button.setEnabled(False)
+            controls.addWidget(button)
+        layout.addLayout(controls)
         layout.addWidget(self.solver_monitor, 1)
         return page
+
+    def _solver_is_active(self) -> bool:
+        return self.backend.running and self._active_backend_mode == "solve"
+
+    def _update_solver_controls(self) -> None:
+        if not hasattr(self, "solver_pause_button"):
+            return
+        active = self._solver_is_active()
+        pause_source = "Resume" if self._solver_paused else "Pause"
+        if getattr(self, "ui_language", "en") == "zh":
+            pause_source = ZH_TEXT.get(pause_source, pause_source)
+        self.solver_pause_button.setText(pause_source)
+        self.solver_pause_button.setEnabled(active and not self._solver_stop_pending)
+        self.solver_stop_now_button.setEnabled(active)
+        self.solver_stop_saved_button.setEnabled(active and not self._solver_stop_pending)
+
+    def _send_solver_control(self, command: str) -> bool:
+        if self.backend.send_control(command):
+            return True
+        self._log(f"Solver control not ready: {command}")
+        self._set_status("Solver control channel is not ready yet")
+        return False
+
+    def _toggle_solver_pause(self) -> None:
+        command = "resume" if self._solver_paused else "pause"
+        if not self._send_solver_control(command):
+            return
+        self._solver_paused = not self._solver_paused
+        self._set_status("Solver resumed" if not self._solver_paused else "Solver paused")
+        self._update_solver_controls()
+
+    def _stop_solver_now(self) -> None:
+        if self._send_solver_control("stop_now"):
+            self._solver_stop_pending = True
+            self._solver_paused = False
+            self._set_status("Stopping solver immediately")
+            self._update_solver_controls()
+
+    def _stop_solver_after_save(self) -> None:
+        if self._send_solver_control("stop_after_save"):
+            self._solver_stop_pending = True
+            self._solver_paused = False
+            source = "Waiting for next saved output cycle"
+            self._set_status(ZH_TEXT.get(source, source) if self.ui_language == "zh" else source)
+            self._update_solver_controls()
 
     def _make_mesh_page(self, viewer: VTKView) -> QWidget:
         page = QWidget()
@@ -927,7 +995,10 @@ class MainWindow(QMainWindow):
 
     def _stop_tasks(self) -> None:
         if self.backend.running:
-            self.backend.terminate()
+            if self._active_backend_mode == "solve":
+                self._stop_solver_now()
+            else:
+                self.backend.terminate()
         if self.optimizer.running:
             self.optimizer.terminate()
 
@@ -1104,6 +1175,8 @@ class MainWindow(QMainWindow):
         self._log("REQUEST " + json.dumps(request, ensure_ascii=False))
         self.progress.setRange(0, 0)
         if mode == "solve":
+            self._solver_paused = False
+            self._solver_stop_pending = False
             self.solver_monitor.start(output / "history.csv")
             self.convergence_timer.start()
             self.tabs.setCurrentIndex(2)
@@ -1119,6 +1192,7 @@ class MainWindow(QMainWindow):
         self.action_solve.setEnabled(not running and not self.optimizer.running)
         self.action_stop.setEnabled(running or self.optimizer.running)
         self._update_mesh_button_state()
+        self._update_solver_controls()
         if not running:
             self.progress.setRange(0, 100)
 
@@ -1127,7 +1201,13 @@ class MainWindow(QMainWindow):
         self.progress.setValue(100)
         self.current_case = Path(result["output_dir"])
         self.opt_case.setText(str(self.current_case))
-        self._set_status(f"Completed: {self.current_case.name}")
+        status = result.get("status", "completed")
+        if status == "stopped_after_save":
+            self._set_status(f"Stopped after saved output cycle: {self.current_case.name}")
+        elif status == "stopped":
+            self._set_status(f"Stopped immediately: {self.current_case.name}")
+        else:
+            self._set_status(f"Completed: {self.current_case.name}")
         self._log(json.dumps(result.get("last_values", {}), ensure_ascii=False, indent=2))
         self._populate_results(result)
         mode = result.get("mode")
@@ -1135,11 +1215,18 @@ class MainWindow(QMainWindow):
             self._mark_mesh_current()
         if mode == "solve":
             self.convergence_timer.stop()
-            self.solver_monitor.finish(result.get("last_values", {}))
+            monitor_state = {
+                "stopped_after_save": "Stopped after saved output cycle",
+                "stopped": "Stopped immediately",
+            }.get(status, "Completed")
+            self.solver_monitor.finish(result.get("last_values", {}), monitor_state)
             self.tabs.setCurrentIndex(3)
         else:
             self.tabs.setCurrentIndex(1)
         self._active_backend_mode = None
+        self._solver_paused = False
+        self._solver_stop_pending = False
+        self._update_solver_controls()
 
     def _backend_failed(self, message: str) -> None:
         self.convergence_timer.stop()
@@ -1149,6 +1236,9 @@ class MainWindow(QMainWindow):
         self._set_status("Task failed")
         self._log("ERROR: " + message)
         self._active_backend_mode = None
+        self._solver_paused = False
+        self._solver_stop_pending = False
+        self._update_solver_controls()
         QMessageBox.critical(self, "Task failed", message)
 
     def _populate_results(self, result: dict) -> None:

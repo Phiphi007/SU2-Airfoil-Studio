@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 import sys
 
@@ -27,6 +28,7 @@ class ApiProcess(QObject):
         self.process.readyReadStandardOutput.connect(self._stdout)
         self.process.finished.connect(self._finished)
         self._stdout_buffer = bytearray()
+        self.control_path: Path | None = None
 
     @property
     def running(self) -> bool:
@@ -36,6 +38,7 @@ class ApiProcess(QObject):
         if self.running:
             raise RuntimeError("A backend task is already running.")
         self._stdout_buffer.clear()
+        self.control_path = Path(request["output_dir"]) / ".solver_control.json"
         if getattr(sys, "frozen", False):
             program = application_root() / "AutoFoilCLI.exe"
             arguments = ["run", "--request", "-"]
@@ -57,6 +60,17 @@ class ApiProcess(QObject):
             self.process.terminate()
             if not self.process.waitForFinished(2500):
                 self.process.kill()
+
+    def send_control(self, command: str) -> bool:
+        if not self.running or self.control_path is None:
+            return False
+        if not self.control_path.parent.is_dir():
+            return False
+        payload = {"command": command, "serial": time.time_ns()}
+        temporary = self.control_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(payload), encoding="utf-8")
+        temporary.replace(self.control_path)
+        return True
 
     def _started(self) -> None:
         self.runningChanged.emit(True)

@@ -47,6 +47,7 @@ class ProcessControllerTests(unittest.TestCase):
             self.assertTrue(controller.resume())
             self.assertTrue(controller.pause())
             self.assertTrue(controller.terminate())
+            self.assertEqual(controller.stop_mode, "immediate")
         self.assertEqual(suspend.call_count, 2)
         self.assertEqual(resume.call_count, 2)
         self.assertTrue(process.terminated)
