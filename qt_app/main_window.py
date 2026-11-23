@@ -123,7 +123,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("SU2AirfoilStudioQt")
-        self.setWindowTitle(f"SU2 Airfoil Studio · Qt Preview {QT_FRONTEND_VERSION}")
+        self.setWindowTitle(f"SU2 Airfoil Studio · V{APP_VERSION}")
         self.resize(1500, 930)
         self.setMinimumSize(1050, 650)
         self.setDockNestingEnabled(True)

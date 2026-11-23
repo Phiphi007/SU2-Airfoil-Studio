@@ -1,6 +1,6 @@
 # SU2 Airfoil Studio 使用教程 / User Guide
 
-本文对应 V2.8.5 Windows 版，按“设计 → 网格 → 设置 → 求解 → 优化 → 导出”的真实顺序说明。This guide follows the actual V2.8.5 Windows workflow: design, mesh, configure, solve, optimize and export.
+本文对应 V1.0.1 Windows 版，按“设计 → 网格 → 设置 → 求解 → 优化 → 导出”的真实顺序说明。This guide follows the actual V1.0.1 Windows workflow: design, mesh, configure, solve, optimize and export.
 
 ## 1. 安装与首次启动 / Installation and first launch
 
@@ -197,7 +197,7 @@ case/
 ## 9. 常见问题 / Troubleshooting
 
 **拖动后翼型看似震荡 / Airfoil appears oscillatory after deformation**  
-先打开导出的 DAT 检查真实几何。V2.8.5 按壁面连续拓扑拆分上下表面，修复了大弯度翼型被直弦符号错误分类造成的假震荡。Inspect the exported DAT first. V2.8.5 splits surfaces by continuous wall topology, avoiding false oscillation from chord-sign classification.
+先打开导出的 DAT 检查真实几何。V1.0.1 按壁面连续拓扑拆分上下表面，修复了大弯度翼型被直弦符号错误分类造成的假震荡。Inspect the exported DAT first. V1.0.1 splits surfaces by continuous wall topology, avoiding false oscillation from chord-sign classification.
 
 **前缘云图有放射状条带 / Radial bands near the leading edge**  
 先检查原始网格和原始 VTU；然后提高前缘/全局密度并做网格无关性比较。显示平滑可降低绘图伪影，但不能替代网格验证。Inspect raw mesh and VTU, refine the leading edge and perform grid-independence checks. Display smoothing is not a numerical fix.

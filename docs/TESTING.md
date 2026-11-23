@@ -1,4 +1,4 @@
-# V2.8.5 测试与验证 / Testing and Validation
+# V1.0.1 测试与验证 / Testing and Validation
 
 本文区分“软件流程通过”“数值收敛”和“物理可信度”。三者不能互相替代。This document separates software integration, numerical convergence and physical validation; none implies the others.
 
@@ -21,7 +21,7 @@
 | 正问题 / Direct CFD | 暖启动 / warm start | Passed force/residual window |
 | 伴随链 / Adjoint chain | CFD_AD → DOT_AD → DEF → CFD | Passed integration smoke test |
 
-## 2. V2.8.5 几何稳定性修复 / Geometry stability fix
+## 2. V1.0.1 几何稳定性修复 / Geometry stability fix
 
 ### 现象 / Symptom
 

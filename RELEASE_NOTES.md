@@ -1,6 +1,6 @@
-# V2.8.5 发布说明 / Release Notes
+# V1.0.1 发布说明 / Release Notes
 
-发布日期 / Release date: **2026-11-17**
+发布日期 / Release date: **2026-11-23**
 
 ## 2026-11-23 Qt-only production update
 
@@ -46,4 +46,4 @@
 
 ## 升级提醒 / Upgrade note
 
-必须用新版完整文件夹替换旧版，不能只替换 EXE。旧算例目录可继续读取，但建议用 V2.8.5 重新生成报告以获得正确的强弯度表面拆分。Replace the complete application folder, not only the EXE. Old cases remain readable, but regenerate reports with V2.8.5 to obtain the corrected strong-camber surface split.
+必须用新版完整文件夹替换旧版，不能只替换 EXE。旧算例目录可继续读取，但建议用 V1.0.1 重新生成报告以获得正确的强弯度表面拆分。Replace the complete application folder, not only the EXE. Old cases remain readable, but regenerate reports with V1.0.1 to obtain the corrected strong-camber surface split.

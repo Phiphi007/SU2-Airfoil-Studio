@@ -1,12 +1,40 @@
+<div align="center">
+
+<img src="assets/branding/su2_airfoil_studio_icon_v3.png" alt="SU2 Airfoil Studio" width="112">
+
 # SU2 Airfoil Studio
 
-**旧 BCE 交互设计 · 网格分辨率约束 D-BCE · CST/D-BCE 接力 · C-H 全四边形网格 · SU2 正问题与离散伴随优化**
-**Legacy BCE interaction · mesh-resolved D-BCE · CST/D-BCE relay · all-quad C-H mesh · SU2 direct and discrete-adjoint optimization**
+### 翼型设计、结构化网格、SU2 求解与离散伴随优化的一体化桌面环境
+### An integrated desktop environment for airfoil design, structured meshing, SU2 and discrete-adjoint optimization
 
-[![Tests](https://github.com/Phiphi007/SU2-Airfoil-Studio/actions/workflows/tests.yml/badge.svg)](https://github.com/Phiphi007/SU2-Airfoil-Studio/actions/workflows/tests.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-007ACC.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Phiphi007/SU2-Airfoil-Studio?display_name=tag&style=flat-square&color=007ACC)](https://github.com/Phiphi007/SU2-Airfoil-Studio/releases/latest)
+[![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=flat-square&logo=windows)](https://github.com/Phiphi007/SU2-Airfoil-Studio/releases/tag/v1.0.1)
+[![Tests](https://img.shields.io/github/actions/workflow/status/Phiphi007/SU2-Airfoil-Studio/tests.yml?branch=main&style=flat-square&label=tests)](https://github.com/Phiphi007/SU2-Airfoil-Studio/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-555555.svg?style=flat-square)](LICENSE)
 
-![Qt workspace](docs/images/07_qt_workspace.png)
+**Legacy BCE interaction · mesh-resolved D-BCE · CST/D-BCE relay · all-quad C-H mesh · live SU2 monitoring**
+
+</div>
+
+![V1.0.1 flow contour workspace](docs/images/v1.0.1/04_flow_contour.png)
+
+## 下载 V1.0.1 / Download V1.0.1
+
+> **Windows 10/11 x64：**从 [GitHub Releases](https://github.com/Phiphi007/SU2-Airfoil-Studio/releases/tag/v1.0.1) 下载 `SU2_Airfoil_Studio_V1.0.1_Windows_x64.zip`，校验 SHA-256，完整解压后运行 `SU2_Airfoil_Studio_Qt.exe`。软件包已经包含 SU2 8.5.0 正问题/伴随工具和 Gmsh，不需要单独配置 Python。
+>
+> **Windows 10/11 x64:** Download `SU2_Airfoil_Studio_V1.0.1_Windows_x64.zip` from [GitHub Releases](https://github.com/Phiphi007/SU2-Airfoil-Studio/releases/tag/v1.0.1), verify SHA-256, extract the complete folder and launch `SU2_Airfoil_Studio_Qt.exe`. SU2 8.5.0 direct/adjoint tools and Gmsh are bundled; Python is not required.
+
+不要只复制主 EXE；`_internal`、`solvers`、`assets` 和文档目录都是运行时的一部分。Do not copy the main EXE by itself; `_internal`, `solvers`, `assets` and documentation are part of the runtime.
+
+## 界面一览 / Workspace at a glance
+
+| 翼型调整 / Airfoil design | C-H 网格 / C-H mesh |
+|---|---|
+| ![Legacy BCE and D-BCE handoff](docs/images/v1.0.1/01_airfoil_design.png) | ![Embedded structured mesh](docs/images/v1.0.1/02_structured_mesh.png) |
+| **实时求解监视 / Live solver monitor** | **结果与云图 / Results and contours** |
+| ![Live residual CL and CD](docs/images/v1.0.1/03_solver_monitor.png) | ![Configurable VTK contour](docs/images/v1.0.1/04_flow_contour.png) |
+
+> 求解器截图用于展示残差、CL、CD 的实时监视能力，其中的跨声速试算并未满足本项目的收敛判据，不能作为验证数据。The solver screenshot demonstrates live residual/CL/CD monitoring; that transonic trial does not meet this project's convergence criteria and is not presented as validated CFD data.
 
 ## 软件是什么 / What this application is
 
@@ -151,9 +179,17 @@ $$
 y_\pm(x;X)=y_c\pm r_y\sqrt{1-\left(\frac{x-X}{r_x}\right)^2}.
 $$
 
-最终翼型取上包络和下包络：$y_u=\sup_X y_+$、$y_l=\inf_X y_-$。这三个控制量对人工设计很直观，但三角函数耦合、接近 $D=0$ 的敏感放大和包络控制椭圆切换，会使高维 Jacobian 条件变差。因此软件保留它作为交互式设计器，而不直接把大量旧 BCE 控制点当优化变量。
+最终翼型取上包络和下包络：
 
-The airfoil is the upper and lower envelope: $y_u=\sup_X y_+$ and $y_l=\inf_X y_-$. These controls are intuitive for manual design, but trigonometric coupling, sensitivity growth near $D=0$ and envelope-owner switching degrade a high-dimensional Jacobian. The software therefore keeps legacy BCE as an interactive generator instead of using many raw BCE control points as optimizer variables.
+$$
+y_u(x)=\sup_{X}\,y_+(x;X),
+\qquad
+y_l(x)=\inf_{X}\,y_-(x;X).
+$$
+
+这三个控制量对人工设计很直观，但三角函数耦合、接近 $D=0$ 的敏感放大和包络控制椭圆切换，会使高维 Jacobian 条件变差。因此软件保留它作为交互式设计器，而不直接把大量旧 BCE 控制点当优化变量。
+
+The airfoil is obtained from the upper and lower envelopes shown above. These controls are intuitive for manual design, but trigonometric coupling, sensitivity growth near $D=0$ and envelope-owner switching degrade a high-dimensional Jacobian. The software therefore keeps legacy BCE as an interactive generator instead of using many raw BCE control points as optimizer variables.
 
 ### 新 D-BCE / Revised D-BCE
 

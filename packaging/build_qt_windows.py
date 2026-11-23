@@ -16,6 +16,8 @@ import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from core_modules.runtime_paths import APP_VERSION  # noqa: E402
 EXECUTABLES = ("SU2_CFD.exe", "SU2_CFD_AD.exe", "SU2_DOT_AD.exe", "SU2_DEF.exe")
 RUNTIME_DLLS = ("libgcc_s_seh-1.dll", "libstdc++-6.dll", "libwinpthread-1.dll")
 
@@ -144,7 +146,7 @@ def main() -> int:
 
     manifest = {
         "frontend": "Qt 6 + VTK",
-        "version": "3.0.0-preview.1",
+        "version": APP_VERSION,
         "built_utc": datetime.now(timezone.utc).isoformat(),
         "python": sys.version,
         "su2_source": str(su2_bin),
@@ -158,7 +160,7 @@ def main() -> int:
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
     if not args.no_zip:
-        archive = output.parent / f"{output.name}_Windows_x64.zip"
+        archive = output.parent / f"SU2_Airfoil_Studio_V{APP_VERSION}_Windows_x64.zip"
         with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as bundle:
             for source in sorted(output.rglob("*")):
                 if source.is_file():

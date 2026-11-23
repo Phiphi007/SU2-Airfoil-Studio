@@ -64,8 +64,8 @@ $$
 The airfoil is the envelope:
 
 $$
-y_u(x)=\sup_X y_+(x;X),\qquad
-y_l(x)=\inf_X y_-(x;X).
+y_u(x)=\sup_{X}\,y_+(x;X),\qquad
+y_l(x)=\inf_{X}\,y_-(x;X).
 $$
 
 最后将几何前后缘仿射归一化到 `[0,1]`。The final geometry is affinely normalized between leading and trailing edges.
