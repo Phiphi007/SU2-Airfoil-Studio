@@ -190,6 +190,7 @@ $$
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -m pytest tests/test_qt_frontend.py -v
 .\.venv\Scripts\python.exe main_pipeline.py --mesh-only --global-refinement 1.0
 ```
 

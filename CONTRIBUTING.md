@@ -3,13 +3,14 @@
 ## Development setup
 
 Use Windows with Python 3.11 or 3.12. Run `Setup_Windows.bat`, or create `.venv`
-and install `requirements.txt` manually. SU2 is only required for an actual CFD
+and install `requirements-dev.txt` manually. SU2 is only required for an actual CFD
 run; it must be installed separately and expose `SU2_CFD.exe` on `PATH`.
 
 Run the regression suite before submitting a change:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -m pytest tests/test_qt_frontend.py -v
 ```
 
 ## Mesh changes

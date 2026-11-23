@@ -114,6 +114,9 @@ SU2_CFD_AD (drag/lift) -> SU2_DOT_AD -> parameter direction
 # 全部 Python 回归 / all Python regressions
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 
+# Qt 前端回归（独立进程，避免 Tk/Qt 运行时相互影响）/ Qt front-end regressions
+.\.venv\Scripts\python.exe -m pytest tests/test_qt_frontend.py -v
+
 # 关键几何和报告回归 / focused geometry and report suite
 .\.venv\Scripts\python.exe -m unittest `
   tests.test_cosine_resampler `
