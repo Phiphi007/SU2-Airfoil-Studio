@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 
@@ -24,6 +25,7 @@ def application():
 
 
 def test_qt_workspace_and_bce_handoff(application, tmp_path: Path) -> None:
+    assert application.font().family() == "Noto Sans CJK SC"
     window = MainWindow()
     window.workdir_edit.setText(str(tmp_path))
     assert window.tabs.count() == 5
@@ -62,6 +64,38 @@ def test_qt_adjoint_controls_are_connected(application) -> None:
     assert window.overlay_position.currentData() == "top_right"
     window.overlay_position.setCurrentIndex(0)
     assert window.scene_viewer.annotation_position == "top_center"
+    window.close()
+    application.processEvents()
+
+
+def test_latest_manual_bce_constraints_and_actions_are_available(application, tmp_path: Path) -> None:
+    window = MainWindow()
+    window.workdir_edit.setText(str(tmp_path))
+    editor = window.editor
+    assert [editor.constraint_mode.itemData(i) for i in range(editor.constraint_mode.count())] == [
+        "free", "lock_thickness", "lock_camber"
+    ]
+    assert set(editor.action_buttons) == {
+        "import", "undo", "reset", "view", "export", "direct", "handoff"
+    }
+
+    lock_thickness = editor.constraint_mode.findData("lock_thickness")
+    editor.constraint_mode.setCurrentIndex(lock_thickness)
+    _, upper_0, lower_0 = editor.canvas.current_geometry()
+    editor.canvas.parameters[9] += 4.0
+    _, upper_1, lower_1 = editor.canvas.current_geometry()
+    assert np.allclose(upper_1 - lower_1, upper_0 - lower_0)
+
+    lock_camber = editor.constraint_mode.findData("lock_camber")
+    editor.constraint_mode.setCurrentIndex(lock_camber)
+    _, upper_2, lower_2 = editor.canvas.current_geometry()
+    editor.canvas.parameters[2] *= 1.15
+    _, upper_3, lower_3 = editor.canvas.current_geometry()
+    assert np.allclose(upper_3 + lower_3, upper_2 + lower_2)
+
+    editor.set_language("zh")
+    assert editor.constraint_label.text() == "约束模式"
+    assert editor.action_buttons["direct"].text() == "直接使用手调翼型"
     window.close()
     application.processEvents()
 

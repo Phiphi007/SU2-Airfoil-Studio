@@ -48,15 +48,17 @@ The application provides two starting points:
 1. 单击控制点使其激活。Click a control point.
 2. 纵向拖动；软件会限制单次灵敏度。Drag vertically; sensitivity is bounded.
 3. 根据需要选择 `0.35×` 精细、`0.8×` 标准或 `1.5×` 快速。Select fine, standard or fast drag gain.
-4. 若结果不理想，使用“一步撤销”；若视图扩大，使用“预览范围复位”。Use Undo or Reset view as needed.
-5. 检查上下表面没有交叉，前后缘保持闭合。Confirm that surfaces do not intersect and endpoints remain closed.
+4. 选择自由变形、锁定厚度或锁定弯度。锁定厚度保持半厚度场不变；锁定弯度保持中弧线不变。Select Free, Lock thickness or Lock camber; the latter modes preserve the actual half-thickness field or mean line.
+5. 若结果不理想，使用“一步撤销”；若视图扩大，使用“预览范围复位”。Use Undo or Reset view as needed.
+6. 检查上下表面没有交叉，前后缘保持闭合；无效拖动会被立即撤回。Confirm that surfaces do not intersect and endpoints remain closed; invalid drags are immediately reverted.
 
 弦向显示范围始终保持 `0≤x/c≤1`，不会因为拖动而改变弦长。纵向只按固定步长扩大，因此大变形不会被裁切，小变形也不会造成视图抖动。The chordwise view remains fixed at `0≤x/c≤1`; the vertical range expands in discrete steps only when necessary.
 
 ### 导出或交接 / Export or hand off
 
 - **导出 DAT / Export DAT**：保留手调结果，适合外部 CAD、Pointwise 或存档。Preserves the manual shape for external tools.
-- **应用 D-BCE / Apply D-BCE**：将当前几何作为后续网格和优化的基准；零改动交接保持完全一致。Uses the current geometry as the downstream baseline; a zero-edit handoff is exact.
+- **直接使用手调翼型 / Use edited shape directly**：不重新拟合，原样进入网格。Sends the exact edited geometry to meshing without refitting.
+- **D-BCE 重拟合并继续 / Refit with D-BCE & continue**：先投影到端点安全紧支撑基，再进入后续优化。Projects onto the endpoint-safe compact basis before optimization.
 
 交接后应比较目标曲线与 D-BCE 曲线。正常情况下二者视觉重合；状态栏会给出 RMSE。After handoff, compare the target and refitted curves; they should visually overlap, with RMSE reported in the status area.
 

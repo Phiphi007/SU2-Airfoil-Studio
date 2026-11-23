@@ -58,20 +58,48 @@ class BCECanvas(FigureCanvasQTAgg):
         self.x = 0.5 * (1.0 - np.cos(np.linspace(0.0, np.pi, 181)))
         self.history: list[np.ndarray] = []
         self.sensitivity = 0.8
+        self.constraint_mode = "free"
         self.active: tuple[int, int] | None = None
+        self.selected: tuple[int, int] | None = None
         self.drag_origin_y = 0.0
         self.drag_origin_value = 0.0
         self.drag_snapshot: np.ndarray | None = None
         self.geometry_ylim = 0.18
+        _, upper, lower = self.current_geometry()
+        camber = 0.5 * (upper + lower)
+        self.thickness_reference = 0.5 * (upper - lower)
+        self.camber_reference = camber.copy()
+        self.control_ylims: dict[str, tuple[float, float]] = {}
         self.language = "en"
         self.mpl_connect("button_press_event", self._press)
         self.mpl_connect("motion_notify_event", self._motion)
         self.mpl_connect("button_release_event", self._release)
+        self._set_fixed_view_limits()
         self._redraw()
 
     def current_geometry(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        upper, lower, _ = legacy_airfoil(self.parameters, self.x)
-        return self.x.copy(), upper, lower
+        upper, lower, camber = legacy_airfoil(self.parameters, self.x)
+        half_thickness = 0.5 * (upper - lower)
+        if self.constraint_mode == "lock_thickness":
+            half_thickness = self.thickness_reference.copy()
+        elif self.constraint_mode == "lock_camber":
+            camber = self.camber_reference.copy()
+        return self.x.copy(), camber + half_thickness, camber - half_thickness
+
+    def set_constraint_mode(self, mode: str) -> None:
+        if mode not in {"free", "lock_thickness", "lock_camber"}:
+            raise ValueError(f"Unknown BCE constraint mode: {mode}")
+        _, upper, lower = self.current_geometry()
+        self.thickness_reference = 0.5 * (upper - lower)
+        self.camber_reference = 0.5 * (upper + lower)
+        self.constraint_mode = mode
+        self._redraw()
+        labels = {
+            "free": ("自由变形", "Free deformation"),
+            "lock_thickness": ("锁定厚度", "Lock thickness"),
+            "lock_camber": ("锁定弯度", "Lock camber"),
+        }
+        self.status.emit(labels[mode][0 if self.language == "zh" else 1])
 
     def load_airfoil(self, path: str) -> None:
         processed = process_airfoil(path, surface_point_count=181)
@@ -91,14 +119,23 @@ class BCECanvas(FigureCanvasQTAgg):
         self.parameters = fitted
         self.baseline_parameters = fitted.copy()
         self.target = (normalized_x.copy(), upper_y.copy(), lower_y.copy())
+        base_upper, base_lower, base_camber = legacy_airfoil(self.parameters, self.x)
+        self.thickness_reference = 0.5 * (base_upper - base_lower)
+        self.camber_reference = base_camber.copy()
         self.history.clear()
+        self.selected = None
+        self._set_fixed_view_limits()
         self._redraw()
         self.status.emit(f"Imported and fitted: {Path(path).name} | RMSE={rmse:.3e}")
 
     def reset(self) -> None:
         self.history.append(self.parameters.copy())
         self.parameters = self.baseline_parameters.copy()
-        self.geometry_ylim = 0.18
+        base_upper, base_lower, base_camber = legacy_airfoil(self.parameters, self.x)
+        self.thickness_reference = 0.5 * (base_upper - base_lower)
+        self.camber_reference = base_camber.copy()
+        self.selected = None
+        self._set_fixed_view_limits()
         self._redraw()
 
     def undo(self) -> None:
@@ -114,13 +151,53 @@ class BCECanvas(FigureCanvasQTAgg):
 
     def dbce_handoff(self, path: Path) -> tuple[float, int]:
         baseline_upper, baseline_lower, _ = legacy_airfoil(self.baseline_parameters, self.x)
-        target_upper, target_lower, _ = legacy_airfoil(self.parameters, self.x)
+        _, target_upper, target_lower = self.current_geometry()
         upper, lower, rmse, variables = compact_dbce_refit(
             self.x, baseline_upper, baseline_lower, target_upper, target_lower
         )
         write_selig(path, "BCE_Qt_D_BCE_handoff", self.x, upper, lower)
         self.status.emit(f"D-BCE handoff: RMSE={rmse:.3e}, variables={variables}")
         return rmse, variables
+
+    @staticmethod
+    def _stable_limits(
+        values: np.ndarray, minimum_span: float, lower_floor: float | None = None
+    ) -> tuple[float, float]:
+        low, high = float(np.min(values)), float(np.max(values))
+        span = max(minimum_span, (high - low) * 1.8)
+        center = 0.5 * (low + high)
+        result = (center - 0.5 * span, center + 0.5 * span)
+        if lower_floor is not None and result[0] < lower_floor:
+            result = (lower_floor, lower_floor + span)
+        return result
+
+    def _set_fixed_view_limits(self) -> None:
+        _, upper, lower = self.current_geometry()
+        target_values = np.r_[upper, lower]
+        if self.target is not None:
+            target_values = np.r_[target_values, self.target[1], self.target[2]]
+        ordinate = float(np.max(np.abs(target_values)))
+        self.geometry_ylim = float(
+            np.ceil(np.clip(1.45 * ordinate + 0.008, 0.095, 0.30) / 0.025) * 0.025
+        )
+        height, alpha, beta, controls = legacy_functions(self.parameters)
+        self.control_ylims = {
+            "h": self._stable_limits(np.r_[height[1], controls["h"][1]], 0.28),
+            "a": self._stable_limits(np.r_[alpha[1], controls["a"][1]], 24.0),
+            "b": self._stable_limits(np.r_[beta[1], controls["b"][1]], 35.0, 0.0),
+        }
+
+    def reset_view(self) -> None:
+        self._set_fixed_view_limits()
+        self._redraw()
+
+    def _ensure_geometry_visible(self, upper: np.ndarray, lower: np.ndarray) -> None:
+        ordinate = float(np.max(np.abs(np.r_[upper, lower])))
+        if ordinate <= 0.88 * self.geometry_ylim:
+            return
+        self.geometry_ylim = min(
+            0.50, float(np.ceil((1.28 * ordinate + 0.008) / 0.025) * 0.025)
+        )
 
     def _style_axis(self, axis, title: str) -> None:
         axis.set_facecolor("#202022")
@@ -145,9 +222,6 @@ class BCECanvas(FigureCanvasQTAgg):
         self.geometry_axis.plot(self.x, lower, color="#168BD2", lw=1.7, label="BCE 下表面" if self.language == "zh" else "BCE lower")
         self.geometry_axis.plot(self.x, camber, "--", color="#D9822B", lw=1.0, label="弯度线" if self.language == "zh" else "Camber")
         self.geometry_axis.fill_between(self.x, lower, upper, color="#1672A3", alpha=0.12)
-        magnitude = float(np.max(np.abs(np.r_[upper, lower])))
-        while magnitude > self.geometry_ylim * 0.88:
-            self.geometry_ylim += 0.025
         self.geometry_axis.set_xlim(-0.02, 1.02)
         self.geometry_axis.set_ylim(-self.geometry_ylim, self.geometry_ylim)
         self.geometry_axis.set_aspect("equal", adjustable="box")
@@ -176,10 +250,16 @@ class BCECanvas(FigureCanvasQTAgg):
             cx, cy = controls[key]
             if index == 0:
                 cx, cy = cx[:-1], cy[:-1]
-            axis.scatter(cx, cy, s=28, color="#F0A020", edgecolors="#1E1E1E", linewidths=0.7, zorder=5)
+            axis.plot(cx, cy, color="#D9534F", lw=0.8, alpha=0.45)
+            axis.scatter(cx, cy, s=30, color="#D9534F", edgecolors="#E8E8E8", linewidths=0.5, zorder=5)
+            if self.selected is not None and self.selected[0] == index:
+                point = self.selected[1]
+                axis.scatter(
+                    [cx[point]], [cy[point]], s=72, color="#FFB000",
+                    edgecolors="white", linewidths=1.0, zorder=7,
+                )
             axis.set_xlim(-0.03, 1.03)
-            pad = max(0.02 if index == 0 else 2.0, float(np.ptp(cy)) * 0.28)
-            axis.set_ylim(float(np.min(cy)) - pad, float(np.max(cy)) + pad)
+            axis.set_ylim(*self.control_ylims[key])
             axis.set_xlabel("x/c")
             self._style_axis(axis, title)
         self.figure.subplots_adjust(left=0.07, right=0.84, top=0.94, bottom=0.08)
@@ -209,10 +289,19 @@ class BCECanvas(FigureCanvasQTAgg):
         return point if axis_index == 0 else 7 + point if axis_index == 1 else 14 + point
 
     def _press(self, event) -> None:
+        if getattr(getattr(self, "toolbar", None), "mode", ""):
+            return
         selected = self._nearest_control(event)
         if selected is None:
             return
+        if self.constraint_mode == "lock_thickness" and selected[0] == 0:
+            self.status.emit("厚度已锁定" if self.language == "zh" else "Thickness is locked")
+            return
+        if self.constraint_mode == "lock_camber" and selected[0] == 1:
+            self.status.emit("弯度已锁定" if self.language == "zh" else "Camber is locked")
+            return
         self.active = selected
+        self.selected = selected
         parameter_index = self._parameter_index(*selected)
         self.drag_origin_y = float(event.ydata)
         self.drag_origin_value = float(self.parameters[parameter_index])
@@ -223,7 +312,21 @@ class BCECanvas(FigureCanvasQTAgg):
             return
         parameter_index = self._parameter_index(*self.active)
         value = self.drag_origin_value + (float(event.ydata) - self.drag_origin_y) * self.sensitivity
-        self.parameters[parameter_index] = np.clip(value, LOWER_BOUNDS[parameter_index], UPPER_BOUNDS[parameter_index])
+        previous = float(self.parameters[parameter_index])
+        self.parameters[parameter_index] = np.clip(
+            value, LOWER_BOUNDS[parameter_index], UPPER_BOUNDS[parameter_index]
+        )
+        _, upper, lower = self.current_geometry()
+        valid, reason = validate_airfoil(upper, lower)
+        if not valid:
+            self.parameters[parameter_index] = previous
+            self.status.emit(
+                f"已阻止无效变形：{reason}"
+                if self.language == "zh"
+                else f"Invalid deformation blocked: {reason}"
+            )
+            return
+        self._ensure_geometry_visible(upper, lower)
         self._redraw()
 
     def _release(self, _event) -> None:
@@ -232,7 +335,11 @@ class BCECanvas(FigureCanvasQTAgg):
                 self.history.append(self.drag_snapshot)
                 if len(self.history) > 40:
                     self.history.pop(0)
-            self.status.emit("BCE geometry updated")
+            self.status.emit(
+                "旧 BCE 控制点已更新，可直接使用或转入 D-BCE。"
+                if self.language == "zh"
+                else "Legacy BCE updated; use directly or hand off to D-BCE."
+            )
         self.active = None
         self.drag_snapshot = None
 
@@ -248,32 +355,52 @@ class AirfoilEditor(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(3, 3, 3, 3)
         layout.setSpacing(3)
-        controls = QHBoxLayout()
-        controls.setSpacing(3)
-        title = QLabel("Legacy BCE manual design → compact D-BCE")
-        title.setProperty("heading", True)
-        controls.addWidget(title)
-        controls.addStretch(1)
+        control_rows = QVBoxLayout()
+        control_rows.setSpacing(3)
+        settings = QHBoxLayout()
+        settings.setSpacing(3)
+        self.title = QLabel("Legacy BCE manual design → compact D-BCE")
+        self.title.setProperty("heading", True)
+        settings.addWidget(self.title)
+        settings.addStretch(1)
+        self.constraint_label = QLabel("Constraint mode")
+        settings.addWidget(self.constraint_label)
+        self.constraint_mode = QComboBox()
+        self.constraint_mode.addItem("Free deformation", "free")
+        self.constraint_mode.addItem("Lock thickness", "lock_thickness")
+        self.constraint_mode.addItem("Lock camber", "lock_camber")
+        settings.addWidget(self.constraint_mode)
         self.sensitivity = QComboBox()
         self.sensitivity.addItem("Fine 0.35×", 0.35)
         self.sensitivity.addItem("Standard 0.8×", 0.8)
         self.sensitivity.addItem("Fast 1.5×", 1.5)
         self.sensitivity.setCurrentIndex(1)
-        controls.addWidget(QLabel("Drag gain"))
-        controls.addWidget(self.sensitivity)
-        for text, callback in (
-            ("Import DAT", self._import),
-            ("Undo", self._undo),
-            ("Reset", self._reset),
-            ("Export DAT", self._export),
-            ("Apply D-BCE", self._handoff),
+        self.sensitivity_label = QLabel("Drag sensitivity")
+        settings.addWidget(self.sensitivity_label)
+        settings.addWidget(self.sensitivity)
+        control_rows.addLayout(settings)
+
+        actions = QHBoxLayout()
+        actions.setSpacing(3)
+        self.action_buttons: dict[str, QPushButton] = {}
+        for key, text, callback in (
+            ("import", "Import DAT", self._import),
+            ("undo", "Undo last drag", self._undo),
+            ("reset", "Restore initial fit", self._reset),
+            ("view", "Reset view", self._reset_view),
+            ("export", "Export manual DAT", self._export),
+            ("direct", "Use edited shape directly", self._use_direct),
+            ("handoff", "Refit with D-BCE & continue", self._handoff),
         ):
             button = QPushButton(text)
             button.clicked.connect(callback)
-            if text == "Apply D-BCE":
+            if key == "handoff":
                 button.setProperty("accent", True)
-            controls.addWidget(button)
-        layout.addLayout(controls)
+            self.action_buttons[key] = button
+            actions.addWidget(button)
+        actions.addStretch(1)
+        control_rows.addLayout(actions)
+        layout.addLayout(control_rows)
         self.canvas = BCECanvas(self)
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
         current_icon_size = self.toolbar.iconSize()
@@ -288,6 +415,7 @@ class AirfoilEditor(QWidget):
         self.canvas.status.connect(self.status)
         self.canvas.geometryChanged.connect(self.geometryChanged)
         self.sensitivity.currentIndexChanged.connect(self._gain_changed)
+        self.constraint_mode.currentIndexChanged.connect(self._constraint_changed)
 
     def ensure_exported(self) -> str:
         directory = Path(self.workdir_provider()) / "airfoil_designs"
@@ -297,10 +425,57 @@ class AirfoilEditor(QWidget):
         return str(path)
 
     def set_language(self, language: str) -> None:
+        language = "zh" if language == "zh" else "en"
         self.canvas.set_language(language)
+        current_constraint = self.constraint_mode.currentData()
+        current_gain = self.sensitivity.currentData()
+        self.title.setText(
+            "旧 BCE 三贝塞尔手调 → 紧支撑 D-BCE"
+            if language == "zh" else "Legacy BCE manual design → compact D-BCE"
+        )
+        self.constraint_label.setText("约束模式" if language == "zh" else "Constraint mode")
+        constraint_text = {
+            "free": ("自由变形", "Free deformation"),
+            "lock_thickness": ("锁定厚度", "Lock thickness"),
+            "lock_camber": ("锁定弯度", "Lock camber"),
+        }
+        self.constraint_mode.blockSignals(True)
+        for index in range(self.constraint_mode.count()):
+            data = self.constraint_mode.itemData(index)
+            self.constraint_mode.setItemText(
+                index, constraint_text[data][0 if language == "zh" else 1]
+            )
+        self.constraint_mode.setCurrentIndex(self.constraint_mode.findData(current_constraint))
+        self.constraint_mode.blockSignals(False)
+        gain_text = {
+            0.35: ("精细 0.35×", "Fine 0.35×"),
+            0.8: ("标准 0.8×", "Standard 0.8×"),
+            1.5: ("快速 1.5×", "Fast 1.5×"),
+        }
+        self.sensitivity_label.setText("拖动灵敏度" if language == "zh" else "Drag sensitivity")
+        self.sensitivity.blockSignals(True)
+        for index in range(self.sensitivity.count()):
+            gain = float(self.sensitivity.itemData(index))
+            self.sensitivity.setItemText(index, gain_text[gain][0 if language == "zh" else 1])
+        self.sensitivity.setCurrentIndex(self.sensitivity.findData(current_gain))
+        self.sensitivity.blockSignals(False)
+        button_text = {
+            "import": ("导入并拟合 DAT", "Import & fit DAT"),
+            "undo": ("撤销上次拖动", "Undo last drag"),
+            "reset": ("恢复初始拟合", "Restore initial fit"),
+            "view": ("重置预览范围", "Reset view"),
+            "export": ("导出手调 DAT", "Export manual DAT"),
+            "direct": ("直接使用手调翼型", "Use edited shape directly"),
+            "handoff": ("D-BCE 重拟合并继续", "Refit with D-BCE & continue"),
+        }
+        for key, button in self.action_buttons.items():
+            button.setText(button_text[key][0 if language == "zh" else 1])
 
     def _gain_changed(self) -> None:
         self.canvas.sensitivity = float(self.sensitivity.currentData())
+
+    def _constraint_changed(self) -> None:
+        self.canvas.set_constraint_mode(str(self.constraint_mode.currentData()))
 
     def _import(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Import airfoil", "", "Airfoil DAT (*.dat);;All files (*)")
@@ -316,6 +491,17 @@ class AirfoilEditor(QWidget):
 
     def _reset(self) -> None:
         self.canvas.reset()
+
+    def _reset_view(self) -> None:
+        self.canvas.reset_view()
+
+    def _use_direct(self) -> None:
+        path = self.ensure_exported()
+        self.status.emit(
+            f"手调翼型已直接送入后续流程：{path}"
+            if self.canvas.language == "zh"
+            else f"Edited airfoil sent directly to the downstream workflow: {path}"
+        )
 
     def _export(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Export airfoil", "BCE_Qt_airfoil.dat", "Airfoil DAT (*.dat)")

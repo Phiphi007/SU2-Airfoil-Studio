@@ -46,9 +46,9 @@ Select a working directory first. Start from a built-in NACA section, import a S
 
 ### 2. 旧 BCE 手调 / Legacy BCE manual design
 
-旧 BCE 页面显示翼型和三条函数 `h(x)`、`α(x)`、`β(x)`。拖动红色控制点改变局部高度、弯度角和饱满度角；弦长固定为 1，纵向视图只在接近边界时扩展。可以撤销、恢复、直接导出手调 DAT，或点击“应用 D-BCE”进入后续流程。
+旧 BCE 页面完整保留三条函数 `h(x)`、`α(x)`、`β(x)` 的红色 Bézier 控制点，并提供“自由变形、锁定厚度、锁定弯度”三种约束模式。锁定厚度时保持半厚度场不变，锁定弯度时保持中弧线不变；精细/标准/快速拖动灵敏度、撤销、恢复、固定预览范围和无效几何拦截均可用。手调结果可以直接送入网格，也可以经 D-BCE 紧支撑重拟合后继续。
 
-The legacy BCE page shows the airfoil and three functions, `h(x)`, `α(x)` and `β(x)`. Drag red control points to change local height, camber angle and fullness angle. Chord remains fixed at one and the vertical view expands only when necessary. Undo, redo, export the manual DAT directly, or click **Apply D-BCE** to continue.
+The legacy BCE page retains the red Bézier control points for `h(x)`, `α(x)` and `β(x)`, together with Free, Lock thickness and Lock camber constraint modes. Lock thickness preserves the half-thickness field; Lock camber preserves the mean line. Fine/standard/fast drag gain, undo, restore, stable view limits and invalid-geometry blocking are available. Use the edited shape directly for meshing or refit it with compact D-BCE before continuing.
 
 | 中文 / Chinese | English |
 |---|---|

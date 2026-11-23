@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QPalette
 from PySide6.QtWidgets import QApplication
+
+from core_modules.runtime_paths import resource_root
 
 
 COLORS = {
@@ -79,6 +81,18 @@ QLabel[muted="true"] { color: #A8A8A8; }
 
 
 def apply_industrial_theme(app: QApplication) -> None:
+    # Qt maintains its own application-font database.  Merely naming the
+    # bundled Noto face in QSS is not enough on machines where it is not
+    # installed system-wide (and produced tofu boxes in the packaged build).
+    font_dir = resource_root() / "assets" / "fonts"
+    registered_families: list[str] = []
+    for filename in ("NotoSansCJKsc-Regular.otf", "NotoSansCJKsc-Bold.otf"):
+        font_id = QFontDatabase.addApplicationFont(str(font_dir / filename))
+        if font_id >= 0:
+            registered_families.extend(QFontDatabase.applicationFontFamilies(font_id))
+    if registered_families:
+        app.setFont(QFont(registered_families[0], 11))
+
     app.setStyle("Fusion")
     palette = QPalette()
     palette.setColor(QPalette.ColorRole.Window, QColor(COLORS["window"]))

@@ -4,6 +4,7 @@
 
 ## 2026-11-23 Qt-only production update
 
+- Qt 手调 BCE 补齐最新约束交互：自由变形、锁定厚度、锁定弯度、红色控制点、固定预览范围、无效几何拦截，以及直接使用/D-BCE 重拟合双出口。The Qt BCE editor restores the latest constraint workflow: free, lock-thickness and lock-camber modes, red control points, stable view limits, invalid-geometry blocking and separate direct/D-BCE exits.
 - 移除旧 Tk 启动/打包入口和 V1/V2 图标；生产入口统一为 `SU2_Airfoil_Studio_Qt.exe`。Removed obsolete Tk launch/package entry points and V1/V2 branding assets; the production entry is now the Qt executable.
 - D-BCE 优化笔刷新增最小半宽与 CFD 壁面最少支撑点门槛。Added minimum half-width and CFD support-node gates for D-BCE optimization brushes.
 - 新增可复现 NACA0012 固定升力案例：充分收敛基准上 CD 降低 0.603%，CL 误差 1.05×10⁻⁵，优化耗时 544.58 s；同时撤销由未收敛基准造成的 3.078% 初步结论。Added a reproducible fixed-lift NACA0012 case with CD −0.603%, CL error 1.05×10⁻⁵ and 544.58 s optimization time on a converged baseline; the preliminary 3.078% claim from an unconverged baseline is explicitly invalidated.
