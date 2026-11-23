@@ -1,0 +1,6 @@
+[submodule "third_party/su2"]
+	path = third_party/su2
+	url = https://github.com/su2code/SU2.git
+[submodule "third_party/gmsh"]
+	path = third_party/gmsh
+	url = https://gitlab.onelab.info/gmsh/gmsh.git

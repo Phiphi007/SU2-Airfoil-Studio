@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=SU2 Airfoil Studio
+Comment=Airfoil geometry, mesh, and SU2 workflow
+Exec=su2-airfoil-studio
+Icon=su2-airfoil-studio
+Categories=Science;Engineering;
+Terminal=false

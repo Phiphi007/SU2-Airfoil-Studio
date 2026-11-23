@@ -40,13 +40,27 @@ DOMAIN_SCALE_MAX = 10.0
 
 
 def _load_gmsh() -> Any:
-    """仅为可选的 GUI 预览加载 Gmsh。"""
+    """Load Gmsh for optional preview, honoring an explicit module directory."""
+    import importlib
+    import os
+    import sys
+    from pathlib import Path
+
+    override = os.environ.get("SU2_STUDIO_GMSH_PYTHON_PATH")
+    if override:
+        module_dir = Path(override).expanduser().resolve()
+        if not module_dir.is_dir():
+            raise FileNotFoundError(f"Gmsh Python directory does not exist: {module_dir}")
+        if str(module_dir) not in sys.path:
+            sys.path.insert(0, str(module_dir))
+        sys.modules.pop("gmsh", None)
+        importlib.invalidate_caches()
     try:
         import gmsh  # type: ignore
     except (ImportError, OSError) as exc:
         raise RuntimeError(
-            "无法加载 Gmsh 预览器。网格已经生成，可直接打开 mesh.msh；"
-            "如需内置预览，请安装 requirements.txt 中的 gmsh。"
+            "Cannot load Gmsh preview. The mesh is available as mesh.msh. "
+            "Set SU2_STUDIO_GMSH_PYTHON_PATH or install gmsh in the backend runtime."
         ) from exc
     return gmsh
 
@@ -758,7 +772,7 @@ def _build_strict_sharp_ch_grid(
     """生成尖后缘三块 C-H 外场与一个贴壁 C 形附面层块。"""
     progress = progress_callback or (lambda value, label: None)
     _, _, reconstruction = reconstruct_perimeter(inner, chord)
-    progress(15, "连续壁面重建与前缘修复")
+    progress(15, "Rebuilding the wall and repairing the leading edge")
     inner, control_indices = _resample_sharp_airfoil(
         inner,
         chord,
@@ -883,9 +897,9 @@ def _build_strict_sharp_ch_grid(
         (0.35, 0.35),
         (0.55, 0.35),
     )
-    progress(28, "构造贴壁层与外场连接")
+    progress(28, "Connecting the boundary layer to the far field")
     for candidate_index, (blend_power, terminal_blend) in enumerate(blend_candidates):
-        progress(30 + 40 * candidate_index / len(blend_candidates), "优化多块网格连接")
+        progress(30 + 40 * candidate_index / len(blend_candidates), "Optimizing block connections")
         bl_rings: list[FloatArray] = []
         for distance in distances:
             fraction = distance / max(bl_thickness, 1.0e-300)
@@ -1062,7 +1076,7 @@ def _build_strict_sharp_ch_grid(
             f"各块最小角：{block_quality_text}。"
         )
 
-    progress(75, "合并网格并检查 Jacobian")
+    progress(75, "Merging blocks and checking Jacobians")
     nodes, quads, block_ids = _merge_structured_blocks(blocks, chord)
     quality = _quality_metrics(nodes, quads)
     bl_grid = next(grid for name, grid, _ in blocks if name == "boundary_layer_c")
@@ -1325,7 +1339,7 @@ def generate_mesh(
         if terminal_output:
             print(f"MESH_PROGRESS|{value:.0f}|{label}", flush=True)
 
-    progress(5, "检查输入几何")
+    progress(5, "Checking input geometry")
     rotated, center, chord = _rotate_to_chord_axis(x_values, y_values)
     boundary = _clean_sharp_boundary(rotated, chord)
     if delta_y >= boundary_layer_thickness_pct * chord:
@@ -1355,9 +1369,9 @@ def generate_mesh(
     mesh_path = output_path / "mesh.su2"
     msh_path = output_path / "mesh.msh"
     empty_triangles = np.empty((0, 3), dtype=np.int64)
-    progress(84, "写入 SU2 网格")
+    progress(84, "Writing the SU2 mesh")
     _write_su2_file(mesh_path, nodes, empty_triangles, quads, markers)
-    progress(90, "写入预览与质量数据")
+    progress(90, "Writing preview and mesh-quality data")
     _write_gmsh_file(msh_path, nodes, quads, markers)
     np.savez_compressed(
         output_path / "mesh_preview.npz", nodes=nodes,
@@ -1370,16 +1384,16 @@ def generate_mesh(
 
     if terminal_output:
         print(
-            "Pointwise 风格全结构化 C-H 网格完成："
-            f"{metadata['circumferential_nodes']} × {metadata['radial_nodes']} 节点，"
-            f"{metadata['quadrilateral_cells']} 个四边形"
+            "Structured multiblock C-H mesh complete: "
+            f"{metadata['circumferential_nodes']} × {metadata['radial_nodes']} nodes, "
+            f"{metadata['quadrilateral_cells']} quadrilateral cells"
         )
         print(
-            "质量："
-            f"最小角 {metadata['minimum_angle_deg']:.2f}°，"
-            f"最小缩放 Jacobian {metadata['minimum_scaled_jacobian']:.4f}"
+            "Quality: "
+            f"minimum angle {metadata['minimum_angle_deg']:.2f}°, "
+            f"minimum scaled Jacobian {metadata['minimum_scaled_jacobian']:.4f}"
         )
-    progress(100, "网格完成")
+    progress(100, "Mesh complete")
 
     if show_gui:
         gmsh = _load_gmsh()

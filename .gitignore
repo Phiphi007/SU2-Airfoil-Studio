@@ -22,3 +22,6 @@ htmlcov/
 restart_*.dat
 history*.csv
 surface_flow*.csv
+
+# Generated private Python runtimes
+.runtime-python/

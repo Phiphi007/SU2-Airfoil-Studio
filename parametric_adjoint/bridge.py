@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -34,7 +35,14 @@ def _restart(case_dir: Path) -> Path:
 def _last_result(case_dir: Path) -> dict[str, Any]:
     path = case_dir / "last_result.json"
     if not path.is_file():
-        return {}
+        api_path = case_dir / "api_result.json"
+        if not api_path.is_file():
+            return {}
+        api_result = json.loads(api_path.read_text(encoding="utf-8"))
+        if api_result.get("residual_target_met") is not True:
+            return {}
+        values = api_result.get("last_values", {})
+        return {"cl": values.get("CL"), "cd": values.get("CD")}
     raw = json.loads(path.read_text(encoding="utf-8"))
     metrics = raw.get("metrics", {}) if isinstance(raw, dict) else {}
     result: dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
@@ -84,14 +92,15 @@ def prepare_case_config(
         raise FileNotFoundError(f"Expected mesh.su2 and run.cfg in {case_dir}")
     restart = _restart(case_dir)
     last = _last_result(case_dir)
+    suffix = ".exe" if os.name == "nt" else ""
     payload: dict[str, Any] = {
         "output": str((case_dir / "parametric_optimization" / mode).resolve()),
         "steps": 6,
         "executables": {
-            "cfd": str((su2_bin / "SU2_CFD.exe").resolve()),
-            "cfd_ad": str((su2_bin / "SU2_CFD_AD.exe").resolve()),
-            "dot_ad": str((su2_bin / "SU2_DOT_AD.exe").resolve()),
-            "deform": str((su2_bin / "SU2_DEF.exe").resolve()),
+            "cfd": str((su2_bin / f"SU2_CFD{suffix}").resolve()),
+            "cfd_ad": str((su2_bin / f"SU2_CFD_AD{suffix}").resolve()),
+            "dot_ad": str((su2_bin / f"SU2_DOT_AD{suffix}").resolve()),
+            "deform": str((su2_bin / f"SU2_DEF{suffix}").resolve()),
             "runtime_bin": str(runtime_bin.resolve()) if runtime_bin else None,
         },
         "case": {

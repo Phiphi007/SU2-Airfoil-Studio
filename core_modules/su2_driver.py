@@ -6,6 +6,7 @@ import re
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from threading import Event
 from typing import Callable, Mapping
@@ -114,15 +115,27 @@ def _resolve_executable(executable: str) -> str:
             if not candidate.is_file():
                 raise FileNotFoundError(f"SU2AUTOFOIL_SU2_EXECUTABLE does not exist: {candidate}")
             return str(candidate)
-        bundled = application_root() / "solvers" / "SU2" / "bin" / "SU2_CFD.exe"
-        if bundled.is_file():
-            return str(bundled)
+        root = application_root()
+        desktop_root = root.parents[2] if getattr(sys, 'frozen', False) and len(root.parents) > 2 else root
+        candidates = [
+            desktop_root / "solvers" / "SU2" / "bin" / "SU2_CFD",
+            desktop_root / "solvers" / "SU2" / "bin" / "SU2_CFD.exe",
+            root / "solvers" / "SU2" / "bin" / "SU2_CFD.exe",
+            root / "solvers" / "SU2" / "bin" / "SU2_CFD",
+            root / "third_party" / "su2" / "bin" / "SU2_CFD",
+            root / "third_party" / "su2" / "bin" / "SU2_CFD.exe",
+            root / "third_party" / "su2" / "build" / "bin" / "SU2_CFD",
+            root / "third_party" / "su2" / "build" / "bin" / "SU2_CFD.exe",
+        ]
+        for bundled in candidates:
+            if bundled.is_file():
+                return str(bundled)
     resolved = shutil.which(executable)
     if resolved is None and Path(executable).is_file():
         resolved = str(Path(executable).expanduser().resolve())
     if resolved is None:
         raise FileNotFoundError(
-            f"找不到 {executable}。请确认 SU2 的 bin 目录已加入 PATH。"
+            f"Cannot find {executable}. Set SU2AUTOFOIL_SU2_EXECUTABLE or add SU2 bin to PATH."
         )
     return resolved
 

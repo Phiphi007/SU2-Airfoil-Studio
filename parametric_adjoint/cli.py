@@ -20,7 +20,7 @@ from .su2 import SU2Runner
 
 
 def _progress(message: str) -> None:
-    print(f"[进度] {message}", flush=True)
+    print(f"[Progress] {message}", flush=True)
 
 
 def _parser() -> argparse.ArgumentParser:

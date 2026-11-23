@@ -135,6 +135,8 @@ def result_files(output: Path) -> dict:
 
 
 def execute(request: dict) -> tuple[dict, int]:
+    if isinstance(request, dict) and request.get("mode") == "optimize":
+        return execute_optimization(request)
     from main_pipeline import run_pipeline
     from core_modules.process_control import ProcessController
     from core_modules.solver_control import SolverControlMonitor
@@ -146,6 +148,9 @@ def execute(request: dict) -> tuple[dict, int]:
             output.mkdir(parents=True, exist_ok=False)
         except FileExistsError as exc:
             raise RequestError("output_dir was created by another request; choose a new directory.") from exc
+        (output / "case_request.json").write_text(
+            json.dumps(request, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
     response = {"api_version": API_VERSION, "version": VERSION, "mode": mode,
                 "output_dir": str(output), "ok": True, "status": "completed"}
     exit_code = 0
@@ -169,6 +174,24 @@ def execute(request: dict) -> tuple[dict, int]:
         try:
             with redirect_stdout(Progress()):
                 report = run_pipeline(args, process_control=controller)
+                mesh_data = output / "mesh_preview.npz"
+                if mesh_data.is_file():
+                    try:
+                        from core_modules.view_data import write_mesh_view
+                        write_mesh_view(mesh_data, output / "mesh_view.bin")
+                    except Exception as render_error:
+                        print(f"Mesh view unavailable: {render_error}")
+                flow = output / "flow.vtu"
+                if mode == "solve" and flow.is_file():
+                    try:
+                        import numpy as np
+                        from core_modules.airfoil_processor import process_airfoil
+                        from core_modules.view_data import write_flow_view
+                        airfoil_geometry = process_airfoil(args.airfoil, surface_point_count=args.surface_points)
+                        airfoil_points = np.column_stack((airfoil_geometry.x, airfoil_geometry.y))
+                        write_flow_view(flow, airfoil_points, output / "flow_view.bin")
+                    except Exception as render_error:
+                        print(f"Flow view unavailable: {render_error}")
             response["report"] = str(report) if report else None
         except CalculationCancelled:
             response["status"] = (
@@ -194,17 +217,94 @@ def execute(request: dict) -> tuple[dict, int]:
     return response, exit_code
 
 
+def execute_optimization(request: dict) -> tuple[dict, int]:
+    """Run a validated direct case through the discrete-adjoint backend."""
+    from parametric_adjoint.bridge import prepare_case_config
+    from parametric_adjoint.config import load_config
+    from parametric_adjoint.optimizer import AdjointOptimizer
+    from core_modules.su2_driver import _resolve_executable
+
+    allowed = {"api_version", "mode", "case_dir", "output_dir", "method", "steps"}
+    if set(request) - allowed:
+        raise RequestError(f"Unknown optimization fields: {sorted(set(request)-allowed)}")
+    if request.get("api_version", API_VERSION) != API_VERSION:
+        raise RequestError("Only api_version=1 is supported.")
+    method = request.get("method", "cst")
+    if method not in ("cst", "bce", "hybrid", "relay"):
+        raise RequestError("method must be cst, bce, hybrid, or relay.")
+    steps = request.get("steps", 3)
+    if type(steps) is not int or not 1 <= steps <= 100:
+        raise RequestError("steps must be an integer from 1 to 100.")
+    case_value, output_value = request.get("case_dir"), request.get("output_dir")
+    if not isinstance(case_value, str) or not isinstance(output_value, str) or not case_value or not output_value:
+        raise RequestError("case_dir and output_dir must be non-empty paths.")
+    case_dir = Path(case_value).expanduser().resolve()
+    output = Path(output_value).expanduser().resolve()
+    result_file = case_dir / "api_result.json"
+    if not result_file.is_file():
+        raise RequestError("Optimization requires a completed API CFD case.")
+    baseline = json.loads(result_file.read_text(encoding="utf-8"))
+    if baseline.get("mode") != "solve" or baseline.get("ok") is not True:
+        raise RequestError("Optimization requires a successful direct CFD case.")
+    if baseline.get("residual_target_met") is not True:
+        raise RequestError("The direct CFD case has not met its residual target. Converge it before optimization.")
+    if output.exists():
+        raise RequestError("output_dir already exists; choose a new optimization directory.")
+    su2_bin = Path(_resolve_executable("SU2_CFD")).parent
+    output.mkdir(parents=True)
+    response = {"api_version": API_VERSION, "version": VERSION, "mode": "optimize",
+                "output_dir": str(output), "ok": True, "status": "completed"}
+    (output / "case_request.json").write_text(json.dumps(request, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        config_file = prepare_case_config(case_dir=case_dir, su2_bin=su2_bin,
+                                          output_config=output / "optimization_config.json",
+                                          runtime_bin=None, mode=method, objective_mode="fixed_aoa",
+                                          target_cl=None, dcl_dalpha=None, dcd_dcl=None)
+        config_payload = json.loads(config_file.read_text(encoding="utf-8"))
+        config_payload["steps"] = steps
+        config_payload["output"] = str(output)
+        config_file.write_text(json.dumps(config_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        with (output / "optimization.log").open("w", encoding="utf-8") as log:
+            def progress(message: str) -> None:
+                line = f"[Progress] {message}\n"
+                log.write(line)
+                log.flush()
+                sys.stderr.write(line)
+                sys.stderr.flush()
+            optimizer = AdjointOptimizer(load_config(config_file), progress=progress)
+            response["study"] = optimizer.run()
+    except Exception as exc:
+        response.update(ok=False, status="failed", error={"type": type(exc).__name__, "message": str(exc)})
+    response["files"] = result_files(output)
+    response_path = output / "api_result.json"
+    response["files"][response_path.name] = str(response_path)
+    response_path.write_text(json.dumps(response, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
+    return response, 0 if response["ok"] else 1
+
+
 def info() -> dict:
     from core_modules.su2_driver import _resolve_executable
     try:
         solver = _resolve_executable("SU2_CFD")
     except FileNotFoundError:
         solver = None
+    try:
+        import gmsh
+        gmsh_version = gmsh.__version__
+    except (ImportError, OSError):
+        gmsh_version = None
+    adjoint = {}
+    if solver:
+        solver_dir = Path(solver).parent
+        suffix = ".exe" if os.name == "nt" else ""
+        adjoint = {name: str(solver_dir / f"{name}{suffix}") if (solver_dir / f"{name}{suffix}").is_file() else None
+                   for name in ("SU2_CFD_AD", "SU2_DOT_AD", "SU2_DEF")}
     return {"api_version": API_VERSION, "version": VERSION, "ok": True,
             "frozen": bool(getattr(sys, "frozen", False)), "platform": sys.platform,
             "application_dir": str(application_root()), "resources_dir": str(resource_root()),
             "default_data_dir": str(data_root()), "su2_executable": solver,
-            "modes": ["mesh", "solve", "report"]}
+            "gmsh_version": gmsh_version, "adjoint_executables": adjoint,
+            "modes": ["mesh", "solve", "report", "optimize"]}
 
 
 def main(argv: list[str] | None = None) -> int:

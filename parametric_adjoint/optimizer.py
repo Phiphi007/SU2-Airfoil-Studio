@@ -76,9 +76,9 @@ class AdjointOptimizer:
             aoa=aoa,
             iterations=iterations,
         )
-        self._emit(f"正问题开始：{label}，AoA={aoa:.7f}°，ITER={iterations}")
+        self._emit(f"Direct solve started: {label}, AoA={aoa:.7f}°, ITER={iterations}")
         seconds = self.runner.run(self.cfg.executables.cfd, cfg, work, f"{label}.log")
-        self._emit(f"正问题完成：{label}，耗时 {seconds:.2f} s")
+        self._emit(f"Direct solve completed: {label}, elapsed {seconds:.2f} s")
         return read_history(work / f"{history}.csv"), seconds
 
     def _initial_state(self) -> DesignState:
@@ -274,7 +274,7 @@ class AdjointOptimizer:
             solution="restart_flow_current",
             aoa=state.aoa_deg,
         )
-        self._emit(f"{objective} 离散伴随开始")
+        self._emit(f"{objective} discrete adjoint started")
         cfd_seconds = self.runner.run(
             self.cfg.executables.cfd_ad, cfg, work, f"cfd_ad_{objective.lower()}.log"
         )
@@ -282,7 +282,7 @@ class AdjointOptimizer:
             self.cfg.executables.dot_ad, cfg, work, f"dot_ad_{objective.lower()}.log"
         )
         self._emit(
-            f"{objective} 伴随完成：AD {cfd_seconds:.2f} s，DOT {dot_seconds:.2f} s"
+            f"{objective} adjoint completed: AD {cfd_seconds:.2f} s, DOT {dot_seconds:.2f} s"
         )
         convergence = read_adjoint_history(work / f"history_adj_{objective.lower()}.csv")
         convergence.update({
@@ -343,11 +343,11 @@ class AdjointOptimizer:
         deform_cfg = self.runner.deform_config(
             work, mesh_in="mesh_current.su2", mesh_out="mesh_trial.su2"
         )
-        self._emit("SU2_DEF 网格形变开始")
+        self._emit("SU2_DEF mesh deformation started")
         deform_seconds = self.runner.run(
             self.cfg.executables.deform, deform_cfg, work, "deform.log"
         )
-        self._emit(f"SU2_DEF 完成，耗时 {deform_seconds:.2f} s")
+        self._emit(f"SU2_DEF completed, elapsed {deform_seconds:.2f} s")
         aoa = state.aoa_deg
         aoa_limited = False
         if self.cfg.objective.mode == "fixed_lift":
@@ -461,10 +461,10 @@ class AdjointOptimizer:
     def run(self) -> dict[str, Any]:
         self.runner.validate_executables()
         self.cfg.output.mkdir(parents=True, exist_ok=True)
-        self._emit(f"输出目录：{self.cfg.output}")
+        self._emit(f"Output directory: {self.cfg.output}")
         self._emit(
-            f"参数化={self.cfg.parameterization.mode}，目标={self.cfg.objective.mode}，"
-            f"计划尝试={self.cfg.steps}"
+            f"Parameterization={self.cfg.parameterization.mode}, objective={self.cfg.objective.mode}, "
+            f"planned attempts={self.cfg.steps}"
         )
         state = self._initial_state()
         radius = self.cfg.trust_region.initial_radius
@@ -481,7 +481,7 @@ class AdjointOptimizer:
         }
         for attempt in range(1, self.cfg.steps + 1):
             self._emit(
-                f"===== 尝试 {attempt}/{self.cfg.steps}，当前信赖域 {radius:.3e} ====="
+                f"===== Attempt {attempt}/{self.cfg.steps}, trust radius {radius:.3e} ====="
             )
             step_started = time.perf_counter()
             step_dir = self.cfg.output / f"step_{attempt:03d}"
@@ -505,8 +505,8 @@ class AdjointOptimizer:
                 state.accepted_steps + 1,
             )
             self._emit(
-                f"几何方向：{direction.stage}，捕获率={direction.capture_fraction:.4f}，"
-                f"条件数={direction.condition:.3e}"
+                f"Geometry direction: {direction.stage}, capture fraction={direction.capture_fraction:.4f}, "
+                f"condition number={direction.condition:.3e}"
             )
             feasible = False
             geometry: dict[str, float | str] = {}
@@ -589,8 +589,8 @@ class AdjointOptimizer:
             }
             rows.append(row)
             self._emit(
-                f"{'接受' if accepted else '拒绝'}：CD={trial.cd:.9f}，CL={trial.cl:.9f}，"
-                f"实际变化={float(result['actual_delta']):+.6e}，rho={ratio:.3f}"
+                f"{'Accepted' if accepted else 'Rejected'}: CD={trial.cd:.9f}, CL={trial.cl:.9f}, "
+                f"actual change={float(result['actual_delta']):+.6e}, rho={ratio:.3f}"
             )
             (step_dir / "result.json").write_text(
                 json.dumps(json_ready(row), ensure_ascii=False, indent=2), encoding="utf-8"
@@ -598,7 +598,7 @@ class AdjointOptimizer:
             self._write_summary(initial, state, rows, time.perf_counter() - started)
         summary = self._write_summary(initial, state, rows, time.perf_counter() - started)
         self._emit(
-            f"优化结束：接受 {state.accepted_steps} 步，总耗时 {summary['total_seconds']:.2f} s"
+            f"Optimization completed: {state.accepted_steps} accepted steps, elapsed {summary['total_seconds']:.2f} s"
         )
         return summary
 
