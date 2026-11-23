@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -18,10 +19,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core_modules.airfoil_processor import process_airfoil
+from core_modules.airfoil_processor import generate_naca0012_surfaces, process_airfoil
 from parametric_adjoint.deformation import write_selig
 from parametric_adjoint.legacy_deformation import (
-    INITIAL_PARAMETERS,
     LOWER_BOUNDS,
     UPPER_BOUNDS,
     compact_dbce_refit,
@@ -41,6 +41,19 @@ rcParams["font.sans-serif"] = [
 rcParams["axes.unicode_minus"] = False
 
 
+@lru_cache(maxsize=1)
+def _default_naca0012_fit() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
+    """Return the exact analytic NACA0012 target and its legacy-BCE control fit."""
+    x = 0.5 * (1.0 - np.cos(np.linspace(0.0, np.pi, 181)))
+    upper_source, lower_source = generate_naca0012_surfaces(401)
+    upper_source = upper_source[::-1]
+    lower_source = lower_source[::-1]
+    upper = np.interp(x, upper_source[:, 0], upper_source[:, 1])
+    lower = np.interp(x, lower_source[:, 0], lower_source[:, 1])
+    parameters, rmse = fit_legacy_bce(x, upper, lower)
+    return x, upper, lower, parameters, rmse
+
+
 class BCECanvas(FigureCanvasQTAgg):
     status = Signal(str)
     geometryChanged = Signal(object, object, object)
@@ -52,10 +65,17 @@ class BCECanvas(FigureCanvasQTAgg):
         grid = self.figure.add_gridspec(2, 3, height_ratios=(1.65, 1.0), hspace=0.36, wspace=0.25)
         self.geometry_axis = self.figure.add_subplot(grid[0, :])
         self.control_axes = [self.figure.add_subplot(grid[1, index]) for index in range(3)]
-        self.parameters = INITIAL_PARAMETERS.copy()
-        self.baseline_parameters = self.parameters.copy()
-        self.target: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None
-        self.x = 0.5 * (1.0 - np.cos(np.linspace(0.0, np.pi, 181)))
+        default_x, default_upper, default_lower, default_parameters, default_rmse = (
+            _default_naca0012_fit()
+        )
+        self.x = default_x.copy()
+        self.parameters = default_parameters.copy()
+        self.baseline_parameters = default_parameters.copy()
+        self.target: tuple[np.ndarray, np.ndarray, np.ndarray] | None = (
+            self.x.copy(), default_upper.copy(), default_lower.copy()
+        )
+        self.target_name = "NACA0012"
+        self.initial_fit_rmse = float(default_rmse)
         self.history: list[np.ndarray] = []
         self.sensitivity = 0.8
         self.constraint_mode = "free"
@@ -79,6 +99,17 @@ class BCECanvas(FigureCanvasQTAgg):
 
     def current_geometry(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         upper, lower, camber = legacy_airfoil(self.parameters, self.x)
+        if self.target is not None:
+            baseline_upper, baseline_lower, _ = legacy_airfoil(
+                self.baseline_parameters, self.x
+            )
+            # The imported/analytic airfoil is the exact reference geometry.
+            # Legacy BCE contributes only its edit relative to the fitted
+            # baseline, so opening or resetting never changes NACA0012 (or a
+            # user DAT) merely because the old representation is approximate.
+            upper = self.target[1] + upper - baseline_upper
+            lower = self.target[2] + lower - baseline_lower
+            camber = 0.5 * (upper + lower)
         half_thickness = 0.5 * (upper - lower)
         if self.constraint_mode == "lock_thickness":
             half_thickness = self.thickness_reference.copy()
@@ -119,7 +150,9 @@ class BCECanvas(FigureCanvasQTAgg):
         self.parameters = fitted
         self.baseline_parameters = fitted.copy()
         self.target = (normalized_x.copy(), upper_y.copy(), lower_y.copy())
-        base_upper, base_lower, base_camber = legacy_airfoil(self.parameters, self.x)
+        self.target_name = Path(path).stem
+        _, base_upper, base_lower = self.current_geometry()
+        base_camber = 0.5 * (base_upper + base_lower)
         self.thickness_reference = 0.5 * (base_upper - base_lower)
         self.camber_reference = base_camber.copy()
         self.history.clear()
@@ -131,7 +164,8 @@ class BCECanvas(FigureCanvasQTAgg):
     def reset(self) -> None:
         self.history.append(self.parameters.copy())
         self.parameters = self.baseline_parameters.copy()
-        base_upper, base_lower, base_camber = legacy_airfoil(self.parameters, self.x)
+        _, base_upper, base_lower = self.current_geometry()
+        base_camber = 0.5 * (base_upper + base_lower)
         self.thickness_reference = 0.5 * (base_upper - base_lower)
         self.camber_reference = base_camber.copy()
         self.selected = None
@@ -150,7 +184,12 @@ class BCECanvas(FigureCanvasQTAgg):
         self.status.emit(f"Exported: {path}")
 
     def dbce_handoff(self, path: Path) -> tuple[float, int]:
-        baseline_upper, baseline_lower, _ = legacy_airfoil(self.baseline_parameters, self.x)
+        if self.target is None:
+            baseline_upper, baseline_lower, _ = legacy_airfoil(
+                self.baseline_parameters, self.x
+            )
+        else:
+            baseline_upper, baseline_lower = self.target[1], self.target[2]
         _, target_upper, target_lower = self.current_geometry()
         upper, lower, rmse, variables = compact_dbce_refit(
             self.x, baseline_upper, baseline_lower, target_upper, target_lower
@@ -212,11 +251,17 @@ class BCECanvas(FigureCanvasQTAgg):
     def _redraw(self) -> None:
         for axis in [self.geometry_axis, *self.control_axes]:
             axis.clear()
-        upper, lower, camber = legacy_airfoil(self.parameters, self.x)
+        _, upper, lower = self.current_geometry()
+        camber = 0.5 * (upper + lower)
         valid, reason = validate_airfoil(upper, lower)
         if self.target is not None:
             tx, tu, tl = self.target
-            self.geometry_axis.plot(tx, tu, "--", color="#8B8B8B", lw=1.0, label="导入目标" if self.language == "zh" else "Imported target")
+            target_label = (
+                f"目标 {self.target_name}"
+                if self.language == "zh"
+                else f"Target {self.target_name}"
+            )
+            self.geometry_axis.plot(tx, tu, "--", color="#8B8B8B", lw=1.0, label=target_label)
             self.geometry_axis.plot(tx, tl, "--", color="#8B8B8B", lw=1.0)
         self.geometry_axis.plot(self.x, upper, color="#4DB8FF", lw=1.7, label="BCE 上表面" if self.language == "zh" else "BCE upper")
         self.geometry_axis.plot(self.x, lower, color="#168BD2", lw=1.7, label="BCE 下表面" if self.language == "zh" else "BCE lower")

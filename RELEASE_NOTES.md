@@ -4,6 +4,7 @@
 
 ## 2026-11-23 Qt-only production update
 
+- Qt 手调 BCE 默认改为解析尖后缘 NACA0012，并以“精确目标 + BCE 增量”方式变形，消除启动/复位时的拟合形状偏差；约束后的实际几何也统一用于显示、导出和下游流程。The Qt manual BCE editor now starts from an analytic sharp-trailing-edge NACA0012 and applies BCE increments to that exact target, eliminating fitted-shape drift at startup/reset; the constrained geometry is consistently used for display, export and downstream workflows.
 - Qt 手调 BCE 补齐最新约束交互：自由变形、锁定厚度、锁定弯度、红色控制点、固定预览范围、无效几何拦截，以及直接使用/D-BCE 重拟合双出口。The Qt BCE editor restores the latest constraint workflow: free, lock-thickness and lock-camber modes, red control points, stable view limits, invalid-geometry blocking and separate direct/D-BCE exits.
 - 移除旧 Tk 启动/打包入口和 V1/V2 图标；生产入口统一为 `SU2_Airfoil_Studio_Qt.exe`。Removed obsolete Tk launch/package entry points and V1/V2 branding assets; the production entry is now the Qt executable.
 - D-BCE 优化笔刷新增最小半宽与 CFD 壁面最少支撑点门槛。Added minimum half-width and CFD support-node gates for D-BCE optimization brushes.

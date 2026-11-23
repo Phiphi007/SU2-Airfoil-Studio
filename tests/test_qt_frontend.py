@@ -78,6 +78,14 @@ def test_latest_manual_bce_constraints_and_actions_are_available(application, tm
     assert set(editor.action_buttons) == {
         "import", "undo", "reset", "view", "export", "direct", "handoff"
     }
+    x_initial, upper_initial, lower_initial = editor.canvas.current_geometry()
+    assert editor.canvas.target_name == "NACA0012"
+    assert np.allclose(upper_initial, editor.canvas.target[1], atol=1.0e-12)
+    assert np.allclose(lower_initial, editor.canvas.target[2], atol=1.0e-12)
+    assert np.max(np.abs(0.5 * (upper_initial + lower_initial))) < 1.0e-12
+    assert np.max(upper_initial - lower_initial) == pytest.approx(0.12, abs=3.0e-4)
+    assert x_initial[0] == pytest.approx(0.0)
+    assert x_initial[-1] == pytest.approx(1.0)
 
     lock_thickness = editor.constraint_mode.findData("lock_thickness")
     editor.constraint_mode.setCurrentIndex(lock_thickness)

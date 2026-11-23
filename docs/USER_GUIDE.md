@@ -39,6 +39,8 @@ The application provides two starting points:
 
 主翼型视图上方显示当前轮廓、导入目标和弯度线；图例放在侧边/非遮挡位置。下方三张图分别是：The main view shows the current airfoil, imported target and camber line. The three lower plots are:
 
+默认目标是解析尖后缘 NACA0012。旧 BCE 拟合只定义控制点和后续变形增量，因此未拖动或复位后的当前几何与 NACA0012 精确重合；导入用户 DAT 时也采用相同的“精确目标 + BCE 增量”规则。The default target is an analytic sharp-trailing-edge NACA0012. The legacy BCE fit defines only the controls and subsequent edit increments, so the untouched or reset geometry coincides exactly with NACA0012. Imported DAT files use the same exact-target-plus-BCE-increment rule.
+
 - `h(x)`：高度/厚度尺度；控制总体厚度和局部高度。Height/thickness scale.
 - `α(x)`：弯度方向；对弯度最敏感。Camber direction; the most sensitive camber control.
 - `β(x)`：局部饱满度和曲率分布。Local fullness and curvature distribution.

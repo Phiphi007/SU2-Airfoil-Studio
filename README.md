@@ -46,9 +46,9 @@ Select a working directory first. Start from a built-in NACA section, import a S
 
 ### 2. 旧 BCE 手调 / Legacy BCE manual design
 
-旧 BCE 页面完整保留三条函数 `h(x)`、`α(x)`、`β(x)` 的红色 Bézier 控制点，并提供“自由变形、锁定厚度、锁定弯度”三种约束模式。锁定厚度时保持半厚度场不变，锁定弯度时保持中弧线不变；精细/标准/快速拖动灵敏度、撤销、恢复、固定预览范围和无效几何拦截均可用。手调结果可以直接送入网格，也可以经 D-BCE 紧支撑重拟合后继续。
+旧 BCE 页面默认从解析尖后缘 NACA0012 开始，并完整保留三条函数 `h(x)`、`α(x)`、`β(x)` 的红色 Bézier 控制点。BCE 仅施加相对于拟合基线的增量，因此启动和复位时的几何严格保持 NACA0012，而不会被拟合误差替换。界面提供“自由变形、锁定厚度、锁定弯度”三种约束模式；锁定厚度时保持半厚度场不变，锁定弯度时保持中弧线不变。精细/标准/快速拖动灵敏度、撤销、恢复、固定预览范围和无效几何拦截均可用。手调结果可以直接送入网格，也可以经 D-BCE 紧支撑重拟合后继续。
 
-The legacy BCE page retains the red Bézier control points for `h(x)`, `α(x)` and `β(x)`, together with Free, Lock thickness and Lock camber constraint modes. Lock thickness preserves the half-thickness field; Lock camber preserves the mean line. Fine/standard/fast drag gain, undo, restore, stable view limits and invalid-geometry blocking are available. Use the edited shape directly for meshing or refit it with compact D-BCE before continuing.
+The legacy BCE page starts from an analytic sharp-trailing-edge NACA0012 and retains the red Bézier control points for `h(x)`, `α(x)` and `β(x)`. BCE contributes increments relative to its fitted baseline, so startup and reset preserve the exact NACA0012 instead of replacing it with the fit error. Free, Lock thickness and Lock camber modes are available: the latter two preserve the half-thickness field or mean line. Fine/standard/fast drag gain, undo, restore, stable view limits and invalid-geometry blocking are included. Use the edited shape directly for meshing or refit it with compact D-BCE before continuing.
 
 | 中文 / Chinese | English |
 |---|---|
