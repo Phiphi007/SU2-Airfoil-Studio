@@ -45,7 +45,7 @@ class PortableAPITests(unittest.TestCase):
     def test_json_stdout_excludes_progress_and_marks_nonconvergence(self):
         with workspace_temp_dir() as root:
             out = root / 'case'
-            def pipeline(args):
+            def pipeline(args, **_kwargs):
                 print('progress not JSON')
                 (out / 'history.csv').write_text('"Inner_Iter","rms[Rho]","CL","CD"\n1,-3,0.2,0.04\n')
                 return None
@@ -65,7 +65,7 @@ class PortableAPITests(unittest.TestCase):
     def test_pipeline_failure_returns_partial_files(self):
         with workspace_temp_dir() as root:
             out = root / 'case'
-            def pipeline(args):
+            def pipeline(args, **_kwargs):
                 (out / 'run.cfg').write_text('partial')
                 raise RuntimeError('solver failed')
             with patch('main_pipeline.run_pipeline', pipeline):
