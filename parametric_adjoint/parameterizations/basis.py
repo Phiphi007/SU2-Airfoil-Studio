@@ -56,6 +56,8 @@ def _bce_selected(
             endpoint_margin=cfg.endpoint_margin,
             endpoint_taper=cfg.endpoint_taper,
             mode=mode,
+            min_half_width=cfg.bce_min_half_width,
+            min_support_points=cfg.bce_min_support_points,
         )
         selected, _, _ = bce.select(candidates, gradient, count)
         matrices.append(candidates[:, selected])
@@ -68,6 +70,8 @@ def _bce_selected(
         "modes": modes,
         "selected_brushes": selected_metadata,
         "dictionary_candidates_per_mode": int(candidates.shape[1]),
+        "minimum_half_width": cfg.bce_min_half_width,
+        "minimum_support_points": cfg.bce_min_support_points,
     }
 
 

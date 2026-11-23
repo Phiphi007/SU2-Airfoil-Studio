@@ -44,6 +44,18 @@ class ParameterizationTests(unittest.TestCase):
             self.assertAlmostEqual(float(np.sqrt(np.mean(result.values ** 2))), 1.0, places=12)
             self.assertLess(float(gradient @ result.values), 0.0)
 
+    def test_bce_dictionary_rejects_under_resolved_brushes(self) -> None:
+        x, y, _ = surface(81)
+        side = surface_sides(x, y)
+        matrix, metadata = dictionary(
+            x, side, candidates=300, endpoint_margin=0.02,
+            endpoint_taper=True, mode="camber",
+            min_half_width=0.06, min_support_points=12,
+        )
+        self.assertTrue(metadata)
+        self.assertTrue(all(item["half_width"] >= 0.06 for item in metadata))
+        self.assertTrue(all(np.count_nonzero(matrix[:, index]) >= 12 for index in range(matrix.shape[1])))
+
     def test_relay_switches_after_global_stage(self) -> None:
         x, y, gradient = surface()
         cfg = Parameterization(

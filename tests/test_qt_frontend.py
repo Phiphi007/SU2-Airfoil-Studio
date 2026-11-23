@@ -51,6 +51,8 @@ def test_qt_adjoint_controls_are_connected(application) -> None:
     assert window.parameterization.count() == 4
     assert window.deformation_mode.count() == 3
     assert window.optimization_steps.minimum() == 1
+    assert window.bce_min_half_width.value() == pytest.approx(0.05)
+    assert window.bce_min_support_points.value() == 12
     assert window.action_open_mesh.isEnabled()
     assert window.action_open_vtu.isEnabled()
     assert window.show_axis.isChecked()

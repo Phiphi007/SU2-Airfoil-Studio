@@ -1,0 +1,70 @@
+{
+  "output": "runs/naca0012_dbce_fixed_lift",
+  "steps": 1,
+  "executables": {
+    "cfd": "<SU2_BIN>/SU2_CFD.exe",
+    "cfd_ad": "<SU2_BIN>/SU2_CFD_AD.exe",
+    "dot_ad": "<SU2_BIN>/SU2_DOT_AD.exe",
+    "deform": "<SU2_BIN>/SU2_DEF.exe",
+    "runtime_bin": "<SU2_BIN>"
+  },
+  "case": {
+    "mesh": "<CASE>/mesh.su2",
+    "restart": "<CASE>/restart_flow.dat",
+    "direct_template": "<CASE>/run.cfg",
+    "adjoint_template": "<CASE>/run.cfg",
+    "marker": "airfoil",
+    "aoa_deg": 2.0,
+    "mach": 0.15,
+    "reynolds": 3000000.0,
+    "initial_cl": 0.215852567318,
+    "initial_cd": 0.0211240940028
+  },
+  "objective": {
+    "mode": "fixed_lift",
+    "target_cl": 0.215852567318,
+    "dcl_dalpha": 0.10971052276,
+    "dcd_dcl": 0.00610534511321
+  },
+  "parameterization": {
+    "mode": "bce",
+    "cst_variables": 8,
+    "bce_variables": 4,
+    "bce_candidates": 800,
+    "bce_min_half_width": 0.05,
+    "bce_min_support_points": 12,
+    "endpoint_margin": 0.02,
+    "endpoint_taper": true,
+    "shape_mode": "both",
+    "relay_cst_steps": 1,
+    "hybrid_cst_weight": 0.65,
+    "hybrid_bce_weight": 0.35
+  },
+  "trust_region": {
+    "initial_radius": 0.00005,
+    "minimum_radius": 0.000001,
+    "maximum_radius": 0.0002,
+    "accept_ratio": 0.05,
+    "shrink_ratio": 0.25,
+    "expand_ratio": 0.75,
+    "shrink_factor": 0.5,
+    "expand_factor": 1.25
+  },
+  "constraints": {
+    "max_displacement": 0.002,
+    "min_thickness": 0.002,
+    "thickness_x_min": 0.02,
+    "thickness_x_max": 0.98,
+    "aoa_min_deg": -10.0,
+    "aoa_max_deg": 15.0
+  },
+  "solver": {
+    "direct_iterations": 1200,
+    "correction_iterations": 1200,
+    "adjoint_iterations": 600,
+    "adjoint_cfl": 25.0,
+    "threads": 4,
+    "max_cl_corrections": 5,
+    "cl_tolerance": 0.00002
+  }
+}

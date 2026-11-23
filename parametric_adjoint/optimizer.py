@@ -126,6 +126,34 @@ class AdjointOptimizer:
         return cd - self.cfg.objective.dcd_dcl * (cl - self.cfg.objective.target_cl)
 
     @staticmethod
+    def _trim_slope(
+        configured: float,
+        aoa: float,
+        cl: float,
+        previous: tuple[float, float] | None,
+    ) -> float:
+        """Return a stable local lift slope for fixed-lift AoA correction.
+
+        The first correction uses the measured baseline slope.  Later
+        corrections use a bounded secant estimate from the deformed airfoil,
+        preventing slow convergence when its lift curve differs from the
+        baseline while rejecting sign flips and near-zero numerical slopes.
+        """
+        if previous is None:
+            return configured
+        previous_aoa, previous_cl = previous
+        delta_aoa = aoa - previous_aoa
+        if abs(delta_aoa) <= 1.0e-12:
+            return configured
+        secant = (cl - previous_cl) / delta_aoa
+        if not math.isfinite(secant) or secant * configured <= 0.0:
+            return configured
+        magnitude = float(np.clip(
+            abs(secant), 0.25 * abs(configured), 4.0 * abs(configured)
+        ))
+        return math.copysign(magnitude, configured)
+
+    @staticmethod
     def _surface_curves(
         x: np.ndarray, y: np.ndarray, reference_y: np.ndarray | None = None
     ) -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
@@ -343,6 +371,7 @@ class AdjointOptimizer:
         solution = "restart_trial"
         corrections: list[dict[str, float | int]] = []
         total_direct = direct_seconds
+        previous_trim_point: tuple[float, float] | None = None
         if self.cfg.objective.mode == "fixed_lift":
             assert self.cfg.objective.target_cl is not None
             assert self.cfg.objective.dcl_dalpha is not None
@@ -350,7 +379,15 @@ class AdjointOptimizer:
                 error = float(history["cl"]) - self.cfg.objective.target_cl
                 if abs(error) <= self.cfg.solver.cl_tolerance:
                     break
-                aoa -= error / self.cfg.objective.dcl_dalpha
+                current_cl = float(history["cl"])
+                slope = self._trim_slope(
+                    self.cfg.objective.dcl_dalpha,
+                    aoa,
+                    current_cl,
+                    previous_trim_point,
+                )
+                previous_trim_point = (aoa, current_cl)
+                aoa -= error / slope
                 bounded = float(np.clip(
                     aoa, self.cfg.constraints.aoa_min_deg, self.cfg.constraints.aoa_max_deg
                 ))
@@ -369,7 +406,12 @@ class AdjointOptimizer:
                 )
                 total_direct += seconds
                 solution = next_solution
-                corrections.append({"index": index, "aoa_deg": aoa, "seconds": seconds})
+                corrections.append({
+                    "index": index,
+                    "aoa_deg": aoa,
+                    "dcl_dalpha_used": slope,
+                    "seconds": seconds,
+                })
         cd, cl = float(history["cd"]), float(history["cl"])
         objective = self._objective(cd, cl)
         actual_delta = objective - state.objective

@@ -81,21 +81,6 @@ def main() -> int:
                     0x10,
                 )
             return 1
-    gui_names = {"autofoilstudio", "su2_autofoil_optimizer_studio"}
-    if Path(sys.executable).stem.lower() in gui_names or sys.argv[1:2] == ["--gui"]:
-        if sys.argv[1:2] == ["--gui"]:
-            del sys.argv[1]
-        try:
-            from gui_app import main as gui_main
-            return gui_main()
-        except Exception:
-            data_root().mkdir(parents=True, exist_ok=True)
-            log = data_root() / "gui_error.log"
-            log.write_text(traceback.format_exc(), encoding="utf-8")
-            if sys.platform == "win32":
-                import ctypes
-                ctypes.windll.user32.MessageBoxW(0, f"启动失败 / Startup failed\n{log}", "SU2 AutoFoil Studio", 0x10)
-            return 1
     from portable_api import main as api_main
     return api_main()
 

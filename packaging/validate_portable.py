@@ -14,11 +14,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> None:
     import pefile
-    source = ROOT / 'portable_release' / 'SU2_AutoFoil_Studio'
+    source = ROOT / 'portable_release' / 'SU2_Airfoil_Studio_Qt'
     target = ROOT / 'build' / 'portable' / 'validation' / (uuid.uuid4().hex[:8] + ' 中文路径 with spaces')
     app = target / 'Copied App'
     app.mkdir(parents=True)
-    for name in ('AutoFoilCLI.exe', 'AutoFoilStudio.exe'):
+    for name in ('AutoFoilCLI.exe', 'SU2_Airfoil_Studio_Qt.exe'):
         shutil.copy2(source / name, app / name)
     for name in ('_internal', 'solvers'):
         shutil.copytree(source / name, app / name)
@@ -44,20 +44,17 @@ def main() -> None:
     assert info['frozen'] and str(app) in info['su2_executable']
     results['checks'].append('frozen info resolves the relocated bundled solver')
     doctor = json.loads(invoke(['doctor']).stdout)
-    assert doctor['ok'] and doctor['gui'] == 'passed'
+    assert doctor['ok'] and doctor['gui'] == 'qt-passed'
     results['doctor'] = doctor
-    results['checks'].append('GUI/Tk/font/airfoil preview, Gmsh DLL and SU2 startup')
+    results['checks'].append('Qt workspace, Gmsh DLL and SU2 startup')
     parsed_schema = json.loads(invoke(['schema']).stdout)
     assert 'global_refinement' in parsed_schema['parameters']
     invalid = subprocess.run([str(app / 'AutoFoilCLI.exe'), 'run'], input='{"parameters":{"mach":-1}}',
                              capture_output=True, text=True, encoding='utf-8', env=env, cwd=target, timeout=30)
     assert invalid.returncode == 2 and not json.loads(invalid.stdout)['ok']
     results['checks'].append('schema and structured invalid-request response')
-    gui_start = invoke(['--smoke-test'], executable='AutoFoilStudio.exe')
-    desktop_log = target / 'Data' / 'desktop.log'
-    gui_output = gui_start.stdout + (desktop_log.read_text(encoding='utf-8') if desktop_log.is_file() else '')
-    assert 'GUI smoke test: PASS' in gui_output, (gui_start.stdout, gui_start.stderr)
-    results['checks'].append('windowed EXE successfully initializes the real GUI')
+    invoke(['--smoke-test'], executable='SU2_Airfoil_Studio_Qt.exe')
+    results['checks'].append('windowed Qt/VTK EXE initializes and closes cleanly')
     case = target / 'API 算例'
     solved = json.loads(invoke(['run'], {'mode': 'solve', 'output_dir': str(case),
                                        'parameters': {'global_refinement': 0.5, 'iterations': 2,
@@ -71,16 +68,12 @@ def main() -> None:
                                        'parameters': {'language': 'zh'}}).stdout)
     assert report['ok'] and report['residual_target_met'] is None
     results['checks'].append('report-only mode regenerates Chinese report without solving')
-    # The GUI workflow must exercise the bundled mesh subprocess dispatch as well.
-    gui_run = invoke(['--gui', '--workflow-smoke-test'])
-    assert 'GUI workflow smoke test: PASS' in gui_run.stdout
-    results['checks'].append('GUI workflow: frozen mesh subprocess, SU2, history, report, live plot')
     solver = app / 'solvers' / 'SU2' / 'bin' / 'SU2_CFD.exe'
     pe = pefile.PE(str(solver))
     imports = [item.dll.decode() for item in pe.DIRECTORY_ENTRY_IMPORT]
     assert not any('mpi' in name.lower() for name in imports)
     assert pe.FILE_HEADER.Machine == 0x8664
-    assert pefile.PE(str(app / 'AutoFoilStudio.exe')).OPTIONAL_HEADER.Subsystem == 2
+    assert pefile.PE(str(app / 'SU2_Airfoil_Studio_Qt.exe')).OPTIONAL_HEADER.Subsystem == 2
     assert pefile.PE(str(app / 'AutoFoilCLI.exe')).OPTIONAL_HEADER.Subsystem == 3
     results['solver_dll_imports'] = imports
     results['checks'].append('x64 solver has no MPI imports; GUI and console PE subsystems correct')

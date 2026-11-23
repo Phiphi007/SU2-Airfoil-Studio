@@ -7,6 +7,7 @@ import csv
 from datetime import datetime
 import json
 import math
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -210,16 +211,21 @@ def main(argv: list[str] | None = None) -> int:
             result = info()
             with redirect_stdout(sys.stderr):
                 import gmsh
-                from gui_app import AutoFoilStudio
-                app = AutoFoilStudio(smoke_test=True)
+                os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+                from PySide6.QtWidgets import QApplication
+                from qt_app.main_window import MainWindow
+                from qt_app.theme import apply_industrial_theme
+                app = QApplication.instance() or QApplication([])
+                apply_industrial_theme(app)
+                window = MainWindow()
                 try:
-                    app.withdraw()
-                    app.update_idletasks()
-                    app._preview_airfoil(show_error=False)
-                    if app.processed_airfoil is None:
-                        raise RuntimeError("Built-in airfoil preview failed.")
+                    window.show()
+                    app.processEvents()
+                    if window.tabs.count() != 5 or window.mesh_viewer is not window.result_viewer:
+                        raise RuntimeError("Qt workspace initialization failed.")
                 finally:
-                    app.destroy()
+                    window.close()
+                    app.processEvents()
             if not result["su2_executable"]:
                 raise FileNotFoundError("SU2 executable not found.")
             check = subprocess.run([result["su2_executable"], "--help"], capture_output=True, text=True,
@@ -227,7 +233,7 @@ def main(argv: list[str] | None = None) -> int:
                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             if check.returncode:
                 raise RuntimeError(f"SU2 dependency check failed: exit {check.returncode}")
-            result.update(gui="passed", gmsh=gmsh.__version__, su2=check.stdout.splitlines()[0])
+            result.update(gui="qt-passed", gmsh=gmsh.__version__, su2=check.stdout.splitlines()[0])
         else:
             payload = sys.stdin.read() if args.request == "-" else Path(args.request).read_text(encoding="utf-8-sig")
             request = json.loads(payload)

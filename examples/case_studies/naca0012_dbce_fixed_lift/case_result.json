@@ -1,0 +1,78 @@
+{
+  "date": "2026-11-23",
+  "airfoil": "NACA0012",
+  "conditions": {
+    "mach": 0.15,
+    "reynolds": 3000000.0,
+    "objective": "fixed_lift",
+    "baseline_aoa_deg": 2.0,
+    "optimized_aoa_deg": 2.002646161476839,
+    "target_cl": 0.215852567318,
+    "solver": "SU2 8.5.0 RANS",
+    "baseline_iterations": 2400,
+    "iterations_per_trial_or_correction": 1200,
+    "adjoint_iterations": 600
+  },
+  "local_polar": {
+    "dcl_dalpha_per_degree": 0.10971052276,
+    "dcd_dcl": 0.00610534511321,
+    "measurement_seconds": 154.8678535
+  },
+  "parameterization": {
+    "method": "D-BCE",
+    "active_variables": 4,
+    "minimum_half_width": 0.05,
+    "minimum_support_points": 12,
+    "actual_support_points": 52,
+    "condition_number": 1.0035371884510085,
+    "capture_fraction": 0.12379098734929411,
+    "trust_radius": 0.00005,
+    "maximum_displacement": 0.00015367041254966358,
+    "minimum_thickness": 0.005684548608222266
+  },
+  "baseline": {
+    "cl": 0.215852567318,
+    "cd": 0.0211240940028,
+    "lift_to_drag": 10.218311246361086,
+    "density_residual": -6.703448679,
+    "last_100_cd_range": 7.7085e-7,
+    "last_100_cl_range": 8.2595e-6
+  },
+  "optimized": {
+    "cl": 0.215842082458,
+    "cd": 0.020996699395000006,
+    "lift_to_drag": 10.279810097647966,
+    "density_residual": -7.703426069,
+    "last_100_cd_range": 1.3739e-7,
+    "last_100_cl_range": 3.328e-7
+  },
+  "improvement": {
+    "cd_reduction_percent": 0.6030772623105523,
+    "lift_to_drag_gain_percent": 0.6018494622463288,
+    "cl_change_percent": -0.004857417324377611,
+    "absolute_cl_error": 1.048486000002069e-5
+  },
+  "acceptance": {
+    "accepted": true,
+    "predicted_delta": -1.1006832878566974e-5,
+    "actual_delta": -0.00012733059411123085,
+    "actual_to_predicted_ratio": 11.568322651575368,
+    "cl_tolerance": 0.00002,
+    "cl_constraint_satisfied": true
+  },
+  "timing_seconds": {
+    "converged_baseline": 156.5944714,
+    "local_polar_calibration": 154.8678535,
+    "adjoint_and_dot": 170.9514791,
+    "direction_selection": 0.0265606,
+    "mesh_deformation": 34.3318391,
+    "trial_and_trim_direct_solves": 337.9594716,
+    "optimization_after_calibration": 544.5786739,
+    "complete_case_without_polar_calibration": 701.1731453,
+    "complete_case_including_baseline_and_polar": 856.0409988
+  },
+  "invalidated_preliminary_claim": {
+    "claimed_cd_reduction_percent": 3.078215702082196,
+    "reason": "The preliminary 800-iteration baseline was still drifting; its apparent gain was dominated by unequal convergence maturity."
+  }
+}

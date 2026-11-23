@@ -73,7 +73,20 @@ def main() -> int:
         raise RuntimeError(f"Refusing to merge into an unrecognized directory: {output}")
     output.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text('{"status": "build in progress"}', encoding="utf-8")
+    # Replace the frozen runtime instead of merging it.  The solver folder is
+    # intentionally kept because it may also be the selected SU2 source.
+    frozen_runtime = output / "_internal"
+    if frozen_runtime.is_dir():
+        shutil.rmtree(frozen_runtime)
+    for executable in ("SU2_Airfoil_Studio_Qt.exe", "AutoFoilCLI.exe"):
+        (output / executable).unlink(missing_ok=True)
     shutil.copytree(frozen, output, dirs_exist_ok=True)
+    # A previous merged build may retain Poppler's unversioned ICU 78 shim even
+    # after the PyInstaller analysis excludes it.  It shadows the Windows ICU
+    # shim and makes QtWidgets fail to load.  Remove both stale files from the
+    # final folder; Qt uses the operating-system ICU implementation instead.
+    for stale_icu in ("icuuc.dll", "icudt78.dll"):
+        (output / "_internal" / stale_icu).unlink(missing_ok=True)
 
     solver_output = output / "solvers" / "SU2" / "bin"
     solver_output.mkdir(parents=True, exist_ok=True)
@@ -96,7 +109,18 @@ def main() -> int:
         if source.is_file():
             shutil.copy2(source, destination)
     if (ROOT / "docs").is_dir():
-        shutil.copytree(ROOT / "docs", output / "docs", dirs_exist_ok=True)
+        if (output / "docs").is_dir():
+            shutil.rmtree(output / "docs")
+        shutil.copytree(ROOT / "docs", output / "docs")
+    case_studies = ROOT / "examples" / "case_studies"
+    if case_studies.is_dir():
+        packaged_examples = output / "examples"
+        if packaged_examples.is_dir():
+            shutil.rmtree(packaged_examples)
+        shutil.copytree(
+            case_studies,
+            packaged_examples / "case_studies",
+        )
 
     license_root = output / "licenses" / "python_packages"
     for distribution_name in ("PySide6", "PySide6-Essentials", "shiboken6", "vtk"):

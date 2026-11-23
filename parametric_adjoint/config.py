@@ -50,6 +50,8 @@ class Parameterization:
     cst_variables: int = 12
     bce_variables: int = 6
     bce_candidates: int = 1200
+    bce_min_half_width: float = 0.05
+    bce_min_support_points: int = 12
     endpoint_margin: float = 0.02
     endpoint_taper: bool = True
     shape_mode: str = "camber"
@@ -162,6 +164,10 @@ def _validate(cfg: StudyConfig) -> None:
         raise ValueError("parameterization.mode must be cst, bce, hybrid, or relay")
     if cfg.parameterization.shape_mode not in {"camber", "thickness", "both"}:
         raise ValueError("shape_mode must be camber, thickness, or both")
+    if not 0.0 < cfg.parameterization.bce_min_half_width < 0.5:
+        raise ValueError("bce_min_half_width must lie between 0 and 0.5")
+    if cfg.parameterization.bce_min_support_points < 6:
+        raise ValueError("bce_min_support_points must be >= 6")
     if cfg.objective.mode not in {"fixed_aoa", "fixed_lift"}:
         raise ValueError("objective.mode must be fixed_aoa or fixed_lift")
     if cfg.objective.mode == "fixed_lift":

@@ -117,6 +117,8 @@ def prepare_case_config(
             "cst_variables": 12,
             "bce_variables": 6,
             "bce_candidates": 1200,
+            "bce_min_half_width": 0.05,
+            "bce_min_support_points": 12,
             "endpoint_margin": 0.02,
             "endpoint_taper": True,
             "shape_mode": "camber",

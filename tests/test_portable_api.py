@@ -87,7 +87,7 @@ class PortableAPITests(unittest.TestCase):
         with workspace_temp_dir() as root:
             worker = root / 'AutoFoilCLI.exe'
             worker.touch()
-            with patch.object(sys, 'frozen', True, create=True), patch.object(sys, 'executable', str(root / 'AutoFoilStudio.exe')):
+            with patch.object(sys, 'frozen', True, create=True), patch.object(sys, 'executable', str(root / 'SU2_Airfoil_Studio_Qt.exe')):
                 self.assertEqual(mesh_worker_command(), [str(worker), '--mesh-worker'])
 
     def test_bundled_solver_wins_over_system_path(self):

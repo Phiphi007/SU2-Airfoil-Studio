@@ -81,8 +81,10 @@ ZH_TEXT = {
     "Parameterization": "参数化方法", "Objective": "优化目标", "Shape variables": "形状变量",
     "Minimum thickness": "最小厚度", "Maximum displacement": "最大位移", "Initial trust radius": "初始信赖域半径",
     "Optimization attempts": "优化尝试次数", "Adjoint iterations": "伴随迭代次数", "Adjoint CFL": "伴随 CFL",
+    "CST variables": "CST 变量数", "D-BCE variables": "D-BCE 变量数", "Target CL": "目标 CL",
     "Direct-flow case": "直接流场算例", "SU2 AD bin": "SU2 AD 目录", "Select case…": "选择算例…",
     "Select SU2 bin…": "选择 SU2 目录…", "Start adjoint optimization": "开始伴随优化",
+    "Minimum D-BCE half-width": "D-BCE 最小半宽", "Minimum brush support nodes": "笔刷最少支撑点",
     "VTK visualization": "VTK 可视化", "Solver monitor": "求解监视器", "Discrete-adjoint workflow": "离散伴随工作流",
     "No saved result image. Native mesh and flow data open in Visualization.": "尚无结果图像；网格与流场在“可视化”中显示。",
     "Run SU2 to display convergence and result files.": "运行 SU2 后显示收敛过程与结果文件。",
@@ -626,6 +628,8 @@ class MainWindow(QMainWindow):
         self.optimization_steps = _integer(6, 1, 100, 1)
         self.cst_variables = _integer(12, 2, 100, 1)
         self.bce_variables = _integer(6, 1, 100, 1)
+        self.bce_min_half_width = _double(0.05, 0.01, 0.30, 3, 0.005)
+        self.bce_min_support_points = _integer(12, 6, 200, 1)
         self.adjoint_iterations = _integer(800, 10, 100000, 100)
         self.adjoint_cfl = _double(50.0, 0.1, 1000.0, 2, 5.0)
         self.target_cl = _double(0.5, -5.0, 5.0, 5, 0.05)
@@ -641,6 +645,8 @@ class MainWindow(QMainWindow):
             ("Optimization attempts", self.optimization_steps),
             ("CST variables", self.cst_variables),
             ("D-BCE variables", self.bce_variables),
+            ("Minimum D-BCE half-width", self.bce_min_half_width),
+            ("Minimum brush support nodes", self.bce_min_support_points),
             ("Adjoint iterations", self.adjoint_iterations),
             ("Adjoint CFL", self.adjoint_cfl),
             ("Target CL", self.target_cl),
@@ -774,6 +780,8 @@ class MainWindow(QMainWindow):
                 "shape_mode": shapes[self.deformation_mode.currentIndex()],
                 "cst_variables": self.cst_variables.value(),
                 "bce_variables": self.bce_variables.value(),
+                "bce_min_half_width": self.bce_min_half_width.value(),
+                "bce_min_support_points": self.bce_min_support_points.value(),
             }
         )
         payload["constraints"].update(

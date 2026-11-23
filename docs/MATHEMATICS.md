@@ -160,7 +160,7 @@ $$
 [\phi;\phi]^T[\psi;-\psi]=0.
 $$
 
-同一模式内，过密中心和相似宽度仍会造成列相关。软件因此不一次激活整个字典，而是按梯度投影选取少量笔刷并进行 QR 正交化。Within each mode, dense centers and similar widths can still correlate. The software therefore selects a sparse active set and applies QR orthogonalization.
+同一模式内，过密中心和相似宽度仍会造成列相关。数学上光滑的窄笔刷若只覆盖少量 CFD 壁面节点，离散后也会呈折线。新版字典先要求 $w\ge w_{\min}$ 且每列非零支撑节点数 $n_s\ge n_{s,\min}$，再按梯度投影选取少量笔刷并进行 QR 正交化。Within each mode, dense centers and similar widths can still correlate. A mathematically smooth narrow brush can also become faceted when sampled by only a few CFD wall nodes. The revised dictionary first requires $w\ge w_{\min}$ and at least $n_s\ge n_{s,\min}$ nonzero support nodes per column, then selects a sparse active set and applies QR orthogonalization.
 
 ## 3. 从旧 BCE 到 D-BCE / Legacy BCE to D-BCE handoff
 
@@ -300,6 +300,18 @@ $$
 $$
 
 攻角修正必须受上下限保护，并通过新的正问题确认；不能只相信线性预测。The angle correction is bounded and must be confirmed by a new direct solve, not by linear prediction alone.
+
+第一次校正使用预先测量的基准斜率。此后的校正使用最近两个真实正问题的割线斜率
+
+The first correction uses the measured baseline slope. Later corrections use the secant slope from the two latest direct solutions:
+
+$$
+s_k=\frac{C_{L,k}-C_{L,k-1}}{\alpha_k-\alpha_{k-1}},
+\qquad
+\alpha_{k+1}=\alpha_k-\frac{C_{L,k}-C_{L,\mathrm{target}}}{\widetilde s_k}.
+$$
+
+为避免未收敛气动力造成符号翻转或近零除法，只有当 $s_k$ 与基准斜率同号时才采用，并将其绝对值限制在基准斜率的 `0.25–4` 倍；否则回退到基准斜率。The secant is used only when it has the same sign as the calibrated baseline slope, and its magnitude is clipped to `0.25–4` times the baseline value; otherwise the baseline slope is used. This prevents sign flips and near-zero divisions caused by incompletely converged force data.
 
 ## 8. 几何约束 / Geometry constraints
 

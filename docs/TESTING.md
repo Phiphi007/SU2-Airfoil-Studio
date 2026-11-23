@@ -95,9 +95,18 @@ SU2_CFD_AD (drag/lift) -> SU2_DOT_AD -> parameter direction
 
 ## 6. 参数化回归 / Parameterization regression
 
+### 收敛基准上的固定升力实算 / Fixed-lift run on a converged baseline
+
+2026-11-23 的 NACA0012 案例先在原重启动上追加 2400 步，得到 `CL=0.21585257`、`CD=0.02112409`；随后以 `|ΔCL|≤2e-5` 为约束运行 DRAG/LIFT 离散伴随和 4 变量 D-BCE。接受结果为 `CL=0.21584208`、`CD=0.02099670`，绝对 CL 误差 `1.05e-5`，同升力降阻 `0.603%`，优化耗时 `544.58 s`。
+
+The 2026-11-23 NACA0012 case first continued the original restart for 2400 iterations to `CL=0.21585257`, `CD=0.02112409`. DRAG/LIFT discrete adjoints and four-variable D-BCE were then run with `|ΔCL|≤2e-5`. The accepted result is `CL=0.21584208`, `CD=0.02099670`, absolute CL error `1.05e-5`, fixed-lift drag reduction `0.603%`, and optimization time `544.58 s`.
+
+一次早期 800 步基准曾给出 3.078% 的表观降阻，但其末段气动力仍漂移；把原翼型继续收敛后，该收益几乎完全消失，因此旧结论已明确撤销。这一负面检查是回归流程的一部分：基准与候选必须达到相当的收敛成熟度。An earlier 800-iteration baseline produced an apparent 3.078% reduction while its forces were still drifting. Continuing the original airfoil removed almost all of that apparent gain, so the claim is explicitly invalidated. Comparable convergence maturity is now a required audit check.
+
 当前 D-BCE 测试包括：Current D-BCE tests include:
 
 - 紧支撑区外位移严格为零；exact zero displacement outside support;
+- 优化笔刷满足最小半宽和最少 CFD 支撑节点；optimization brushes satisfy minimum width and CFD support-node gates;
 - 前后缘不移动；fixed endpoints;
 - 弯度模式上下表面同向；same-direction camber mode;
 - 最终 DAT 为标准 Selig 顺序；valid Selig export;
@@ -130,7 +139,7 @@ SU2_CFD_AD (drag/lift) -> SU2_DOT_AD -> parameter direction
 .\.venv\Scripts\python.exe main_pipeline.py --mesh-only --global-refinement 1.0
 ```
 
-便携版发布前还应运行 `AutoFoilCLI.exe doctor` 和 `SU2_AutoFoil_Optimizer_Studio.exe --smoke-test`。Before release, also run the portable dependency doctor and GUI smoke test.
+便携版发布前还应运行 `AutoFoilCLI.exe doctor` 和 `SU2_Airfoil_Studio_Qt.exe --smoke-test`。Before release, also run the portable dependency doctor and Qt GUI smoke test.
 
 ## 8. 尚未宣称的内容 / What is not claimed
 

@@ -23,19 +23,24 @@ def dictionary(
     endpoint_margin: float,
     endpoint_taper: bool,
     mode: str,
+    min_half_width: float = 0.05,
+    min_support_points: int = 12,
 ) -> tuple[np.ndarray, list[dict[str, float]]]:
     center_count = max(11, int(np.sqrt(candidates * 3.0)))
     width_count = max(7, int(np.ceil(candidates / center_count)))
     columns: list[np.ndarray] = []
     metadata: list[dict[str, float]] = []
     for center in np.linspace(0.04, 0.96, center_count):
-        for width in np.linspace(0.035, 0.30, width_count):
+        for width in np.linspace(min_half_width, 0.30, width_count):
             if center - width < endpoint_margin or center + width > 1.0 - endpoint_margin:
                 continue
             value = compact_bump(x, float(center), float(width))
             if endpoint_taper:
                 value *= np.sqrt(np.clip(x, 0.0, 1.0)) * (1.0 - np.clip(x, 0.0, 1.0))
-            if np.count_nonzero(value > 1.0e-12) < 3:
+            # A mathematically smooth bump can still look faceted after it is
+            # sampled on a sparse CFD wall.  Reject brushes that touch too few
+            # wall nodes so the deformed surface remains resolved by the mesh.
+            if np.count_nonzero(value > 1.0e-12) < min_support_points:
                 continue
             columns.append(value)
             metadata.append({"center": float(center), "half_width": float(width)})

@@ -2,6 +2,14 @@
 
 发布日期 / Release date: **2026-11-17**
 
+## 2026-11-23 Qt-only production update
+
+- 移除旧 Tk 启动/打包入口和 V1/V2 图标；生产入口统一为 `SU2_Airfoil_Studio_Qt.exe`。Removed obsolete Tk launch/package entry points and V1/V2 branding assets; the production entry is now the Qt executable.
+- D-BCE 优化笔刷新增最小半宽与 CFD 壁面最少支撑点门槛。Added minimum half-width and CFD support-node gates for D-BCE optimization brushes.
+- 新增可复现 NACA0012 固定升力案例：充分收敛基准上 CD 降低 0.603%，CL 误差 1.05×10⁻⁵，优化耗时 544.58 s；同时撤销由未收敛基准造成的 3.078% 初步结论。Added a reproducible fixed-lift NACA0012 case with CD −0.603%, CL error 1.05×10⁻⁵ and 544.58 s optimization time on a converged baseline; the preliminary 3.078% claim from an unconverged baseline is explicitly invalidated.
+- 固定升力配平在首步后使用带符号和幅值保护的局部割线斜率，减少变形翼型与基准升力曲线不同导致的慢收敛。Fixed-lift trim now uses a sign- and magnitude-bounded local secant slope after the first correction, reducing slow convergence when the deformed lift curve differs from the baseline.
+- README、案例教程和便携版构建说明全部更新为中英双语 Qt/VTK 工作流。Rewrote the README, case tutorial and portable-build guide for the bilingual Qt/VTK workflow.
+
 ## 主要修复 / Key fixes
 
 - 大弯度翼型的上下表面按连续壁面拓扑拆分，修复几何图和 Cp 图的假高频震荡。Strongly cambered surfaces are split by continuous wall topology, removing false high-frequency oscillation in geometry and Cp plots.

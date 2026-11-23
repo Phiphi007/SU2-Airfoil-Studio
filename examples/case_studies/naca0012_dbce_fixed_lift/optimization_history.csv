@@ -1,0 +1,2 @@
+﻿attempt,accepted_step,accepted,stage,trust_radius,next_radius,cl,cd,objective,predicted_delta,actual_delta,acceptance_ratio,capture_fraction,geometry_condition,adjoint_seconds,selection_seconds,deform_seconds,direct_seconds,attempt_seconds
+1,1,True,bce,5e-05,6.25e-05,0.215842082458,0.020996699395000006,0.02099676340868877,-1.1006832878566974e-05,-0.00012733059411123085,11.568322651575368,0.12379098734929411,1.0035371884510085,170.95147910000378,0.026560599999356782,34.33183909999934,337.95947159999923,544.5757148000012

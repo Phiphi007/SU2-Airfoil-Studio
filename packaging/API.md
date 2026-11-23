@@ -3,7 +3,7 @@
 ## 1. 接口形式
 
 这是本地 **EXE 子进程 + UTF-8 JSON** 接口，不是 HTTP 服务，不监听端口。
-桌面端为 `AutoFoilStudio.exe`；自动化端为同一文件夹内的 `AutoFoilCLI.exe`。
+桌面端为 `SU2_Airfoil_Studio_Qt.exe`；自动化端为同一文件夹内的 `AutoFoilCLI.exe`。
 二者使用同一套网格、求解、后处理核心。复制时保留整个发布文件夹。
 
 ```powershell

@@ -1,30 +1,43 @@
-# Windows x64 rebuild
+# Qt Windows x64 便携版构建 / Qt Windows x64 portable build
 
-Build on Windows x64 using CPython 3.12 with Tcl/Tk. Target use requires no Python.
-The editable application source is in `sources/AutoFoil-application-source.zip`.
+当前唯一生产打包目标是 PySide6 + VTK 版本。旧 Tk 打包脚本已经移除；`gui_app.py` 仅作为兼容数值后端和回归夹具保留。
 
-1. Extract source, create `.venv`, install `requirements.txt` and
-   `packaging/requirements-build.txt`.
-2. Place these unchanged upstream archives in `build/portable/downloads/`:
-   - https://github.com/su2code/SU2/releases/download/v8.5.0/SU2-v8.5.0-win64-omp.zip
-   - https://github.com/su2code/SU2/archive/refs/tags/v8.5.0.zip
-     (save as `SU2-v8.5.0-source.zip`)
-   - https://gmsh.info/src/gmsh-4.15.2-source.tgz
-   - https://raw.githubusercontent.com/tcltk/tcl/core-8-6-12/license.terms
-     (save as `Tcl-8.6.12-license.terms`; use the matching notice if rebuilding with another Tcl version)
-3. Run `python packaging/build_windows.py` from the source root.
+The only production packaging target is the PySide6 + VTK application. Legacy Tk packaging scripts have been removed; `gui_app.py` remains only as a compatibility numerical backend and regression fixture.
 
-Output: `portable_release/SU2_AutoFoil_Studio/` and its ZIP/SHA-256.
-PyInstaller creates two entry points sharing `_internal`, rather than repeatedly
-extracting the scientific stack to a temporary folder on every launch.
-`AutoFoilStudio.exe` is windowed; `AutoFoilCLI.exe` is console/stdio capable and
-also serves the private mesh worker command. `--mesh-worker` is internal, not API v1.
+## 依赖 / Prerequisites
 
-Build cache and downloads stay in `build/portable`; no existing CFD case is copied.
-`--skip-freeze` only refreshes documentation/source/solver packaging and must not
-be used after changing application code. Check `BUILD_MANIFEST.json` for versions
-and SHA-256 checksums. This records the build, but byte-identical EXE reproducibility
-across different toolchains is not promised.
+- Windows x64, CPython 3.12;
+- `requirements.txt` and `packaging/requirements-build.txt`;
+- a SU2 AD directory containing `SU2_CFD.exe`, `SU2_CFD_AD.exe`, `SU2_DOT_AD.exe`, `SU2_DEF.exe`;
+- `libgcc_s_seh-1.dll`, `libstdc++-6.dll`, `libwinpthread-1.dll` in the same directory or a separate runtime directory.
 
-Reference: https://pyinstaller.org/en/stable/runtime-information.html
-and https://pyinstaller.org/en/stable/spec-files.html
+## 构建 / Build
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r packaging\requirements-build.txt
+.\.venv\Scripts\python.exe packaging\build_qt_windows.py `
+  --su2-bin "D:\SU2-AD\bin" `
+  --runtime-bin "D:\SU2-AD\bin"
+```
+
+输出 / Output:
+
+```text
+portable_release/SU2_Airfoil_Studio_Qt/
+portable_release/SU2_Airfoil_Studio_Qt.zip
+```
+
+`SU2_Airfoil_Studio_Qt.exe` 是无控制台桌面入口，`AutoFoilCLI.exe` 是 JSON/stdio 和私有工作进程入口。二者共享 `_internal`、`assets` 与 `solvers`，不能只复制单个 EXE。
+
+`SU2_Airfoil_Studio_Qt.exe` is the windowed entry point and `AutoFoilCLI.exe` provides JSON/stdio and private worker commands. They share `_internal`, `assets` and `solvers`; do not copy a single EXE alone.
+
+## 发布验证 / Release verification
+
+```powershell
+.\portable_release\SU2_Airfoil_Studio_Qt\AutoFoilCLI.exe info
+.\portable_release\SU2_Airfoil_Studio_Qt\AutoFoilCLI.exe doctor
+.\portable_release\SU2_Airfoil_Studio_Qt\SU2_Airfoil_Studio_Qt.exe --smoke-test
+```
+
+正式发布还应运行核心回归、Qt 回归、真实网格和至少一个 SU2 正问题/伴随案例。A production release must also pass core regressions, Qt regressions, a real mesh case and at least one SU2 direct/adjoint case.

@@ -7,7 +7,7 @@
 ### 便携版 / Portable build
 
 1. 下载并完整解压 ZIP。Download and fully extract the ZIP.
-2. 双击 `SU2_AutoFoil_Optimizer_Studio.exe`。Launch the executable.
+2. 双击 `SU2_Airfoil_Studio_Qt.exe`。Launch the executable.
 3. 软件顶部首先选择一个空的工作目录。Choose an empty working directory at the top of the window.
 4. 右上角可切换“中文 / English”；切换不影响已有数据。Use the upper-right language selector; it does not alter project data.
 
@@ -17,10 +17,10 @@
 
 ```powershell
 .\Setup_Windows.bat
-.\Launch_SU2_AutoFoil.bat
+.\Launch_SU2_Airfoil_Qt.bat
 ```
 
-源码版会在 `.venv` 中安装 `numpy`、`matplotlib`、`meshio` 和 `psutil`。确保 `SU2_CFD.exe`、`SU2_CFD_AD.exe`、`SU2_DOT_AD.exe` 与 `SU2_DEF.exe` 可从 `PATH` 访问。The source build installs the Python dependencies into `.venv`; make the four SU2 executables available on `PATH`.
+源码版会在 `.venv` 中安装 NumPy、Matplotlib、PySide6、VTK 与 Gmsh。确保 `SU2_CFD.exe`、`SU2_CFD_AD.exe`、`SU2_DOT_AD.exe` 与 `SU2_DEF.exe` 位于所选 SU2 目录并带有 MinGW 运行库。The source build installs NumPy, Matplotlib, PySide6, VTK and Gmsh; keep the four SU2 executables and their MinGW runtime DLLs in the selected SU2 directory.
 
 ## 2. 选择起点 / Choose a starting point
 
@@ -156,7 +156,7 @@ The application provides two starting points:
 2. 选择固定攻角或固定升力。Choose fixed AoA or fixed lift.
 3. 选择弯度、厚度或联合变量。Choose camber, thickness or combined modes.
 4. 输入最小厚度、最大单步位移、信赖域初值和最大尝试次数。Set thickness, displacement, trust radius and attempts.
-5. 对 D-BCE 设置候选中心、尺度范围和激活笔刷数；不要盲目增加维数。For D-BCE, set candidate centers, widths and active brush count; more variables are not automatically better.
+5. 对 D-BCE 设置激活笔刷数、最小半宽和最少支撑节点；不要盲目增加维数。最少支撑节点用于避免光滑笔刷在稀疏 CFD 壁面上离散成锯齿。For D-BCE, set active brush count, minimum half-width and minimum support nodes; more variables are not automatically better. The support-node gate prevents a smooth brush from becoming faceted on a sparse CFD wall.
 
 优化循环为：正问题 → 离散伴随 → 梯度投影/变量预条件 → 信赖域试步 → SU2_DEF → 新正问题 → 接受或缩小步长。The loop is direct solve → discrete adjoint → projected/preconditioned direction → trust-region trial → SU2_DEF → corrected direct solve → accept or shrink.
 
