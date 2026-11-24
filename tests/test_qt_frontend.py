@@ -72,12 +72,74 @@ def test_qt_adjoint_controls_are_connected(application) -> None:
     assert window.overlay_position.currentData() == "top_right"
     window.overlay_position.setCurrentIndex(0)
     assert window.result_viewer.annotation_position == "top_center"
-    assert window.overlay_text_color.count() == 2
+    assert window.overlay_text_color.count() == 7
     window.overlay_text_color.setCurrentIndex(window.overlay_text_color.findData("black"))
     assert window.result_viewer.annotation_text_color == "black"
+    assert window.axis_color.count() == 7
+    window.axis_color.setCurrentIndex(window.axis_color.findData("cyan"))
+    assert window.result_viewer.axis_color == "cyan"
+    assert window.theme_combo.count() == 8
+    window.theme_combo.setCurrentIndex(window.theme_combo.findData("deep_blue"))
+    assert window.theme_combo.currentData() == "deep_blue"
+    assert window.theme_combo.findData("rose") >= 0
+    assert window.mesh_annotation_color.count() == 8
+    assert window.mesh_annotation_color.currentData() == "auto"
+    window.mesh_annotation_color.setCurrentIndex(
+        window.mesh_annotation_color.findData("black")
+    )
+    assert window.mesh_viewer.annotation_text_color == "black"
+    assert not window.show_result_mesh_edges.isChecked()
+    assert window.result_mesh_edge_color.count() == 7
+    window.show_result_mesh_edges.setChecked(True)
+    window.result_mesh_edge_color.setCurrentIndex(
+        window.result_mesh_edge_color.findData("red")
+    )
+    assert window.result_viewer.mesh_edges_visible
+    assert window.result_viewer.mesh_edge_color == "red"
+    assert window.show_airfoil_outline.isChecked()
+    assert window.airfoil_outline_color.count() == 7
+    window.show_airfoil_outline.setChecked(False)
+    window.airfoil_outline_color.setCurrentIndex(
+        window.airfoil_outline_color.findData("cyan")
+    )
+    assert not window.result_viewer.airfoil_outline_visible
+    assert window.result_viewer.airfoil_outline_color == "cyan"
+    assert window.thread_mode.count() == 2
+    window.thread_mode.setCurrentIndex(window.thread_mode.findData("auto"))
+    assert window._effective_threads() == window.auto_threads
+    window.thread_mode.setCurrentIndex(window.thread_mode.findData("manual"))
+    window.threads.setValue(3)
+    assert window._effective_threads() == 3
+    assert window.live_contour.isChecked()
+    window.live_contour_interval.setValue(20)
+    assert window.live_flow_timer.interval() == 20_000
     assert window.colormap.count() == 6
     window.colormap.setCurrentIndex(window.colormap.findData("viridis"))
     assert window.result_viewer.colormap_name == "viridis"
+    window.close()
+    application.processEvents()
+
+
+def test_live_contour_refreshes_only_stable_new_field(application, tmp_path: Path) -> None:
+    import time
+
+    window = MainWindow()
+    case = tmp_path / "case"
+    case.mkdir()
+    flow = case / "flow.vtu"
+    flow.write_bytes(b"x" * 2048)
+    old = time.time() - 3.0
+    os.utime(flow, (old, old))
+    loaded: list[tuple[Path, bool]] = []
+    window.result_viewer.load_vtu = lambda path, preserve_view=False: loaded.append(
+        (Path(path), preserve_view)
+    )
+    window._active_backend_mode = "solve"
+    window._active_backend_output = case
+    window._refresh_live_flow()
+    assert loaded == [(flow, False)]
+    window._refresh_live_flow()
+    assert len(loaded) == 1
     window.close()
     application.processEvents()
 

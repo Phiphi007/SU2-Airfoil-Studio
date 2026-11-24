@@ -61,6 +61,9 @@ class PortableAPITests(unittest.TestCase):
             self.assertEqual(result['last_values']['CL'], 0.2)
             self.assertIn('progress not JSON', stderr.getvalue())
             self.assertTrue((out / 'api_result.json').is_file())
+            saved = json.loads((out / 'case_request.json').read_text(encoding='utf-8'))
+            self.assertEqual(saved['mode'], 'solve')
+            self.assertEqual(saved['output_dir'], str(out))
 
     def test_pipeline_failure_returns_partial_files(self):
         with workspace_temp_dir() as root:
@@ -74,6 +77,19 @@ class PortableAPITests(unittest.TestCase):
             self.assertFalse(result['ok'])
             self.assertIn('run.cfg', result['files'])
             self.assertIn('solver failed', result['error']['message'])
+
+    def test_optimization_requires_converged_direct_case(self):
+        with workspace_temp_dir() as root:
+            case = root / 'direct'
+            case.mkdir()
+            (case / 'api_result.json').write_text(json.dumps({
+                'mode': 'solve', 'ok': True, 'residual_target_met': False
+            }), encoding='utf-8')
+            output = root / 'optimization'
+            with self.assertRaisesRegex(api.RequestError, 'residual target'):
+                api.execute({'mode': 'optimize', 'case_dir': str(case),
+                             'output_dir': str(output), 'method': 'cst', 'steps': 1})
+            self.assertFalse(output.exists())
 
     def test_bad_json_returns_structured_error(self):
         stdout = io.StringIO()
@@ -97,6 +113,20 @@ class PortableAPITests(unittest.TestCase):
             solver.parent.mkdir(parents=True)
             solver.touch()
             with patch('core_modules.runtime_paths.application_root', return_value=root), \
+                    patch.dict('os.environ', {'SU2AUTOFOIL_SU2_EXECUTABLE': ''}), \
+                    patch('shutil.which', side_effect=AssertionError('PATH must not be consulted')):
+                self.assertEqual(_resolve_executable('SU2_CFD'), str(solver))
+
+    def test_frozen_backend_finds_desktop_solver(self):
+        from core_modules.su2_driver import _resolve_executable
+        with workspace_temp_dir() as root:
+            backend = root / 'runtime' / 'backend'
+            backend.mkdir(parents=True)
+            solver = root / 'solvers' / 'SU2' / 'bin' / 'SU2_CFD'
+            solver.parent.mkdir(parents=True)
+            solver.touch()
+            with patch.object(sys, 'frozen', True, create=True), \
+                    patch('core_modules.runtime_paths.application_root', return_value=backend), \
                     patch.dict('os.environ', {'SU2AUTOFOIL_SU2_EXECUTABLE': ''}), \
                     patch('shutil.which', side_effect=AssertionError('PATH must not be consulted')):
                 self.assertEqual(_resolve_executable('SU2_CFD'), str(solver))

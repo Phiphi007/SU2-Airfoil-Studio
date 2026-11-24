@@ -6,6 +6,7 @@ import re
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from threading import Event
 from typing import Callable, Mapping
@@ -114,9 +115,30 @@ def _resolve_executable(executable: str) -> str:
             if not candidate.is_file():
                 raise FileNotFoundError(f"SU2AUTOFOIL_SU2_EXECUTABLE does not exist: {candidate}")
             return str(candidate)
-        bundled = application_root() / "solvers" / "SU2" / "bin" / "SU2_CFD.exe"
-        if bundled.is_file():
-            return str(bundled)
+        root = application_root()
+        # A frozen backend can live below ``runtime/backend`` while the solver
+        # bundle remains at the desktop application's root.  Search both that
+        # layout and source/developer layouts on Windows and POSIX platforms.
+        search_roots = [root]
+        if getattr(sys, "frozen", False):
+            # Support both <app>/runtime/backend and one-file/folder layouts
+            # without assuming a single fixed nesting depth.
+            search_roots.extend(list(root.parents[:3]))
+        candidates = tuple(
+            candidate
+            for search_root in search_roots
+            for candidate in (
+                search_root / "solvers" / "SU2" / "bin" / "SU2_CFD",
+                search_root / "solvers" / "SU2" / "bin" / "SU2_CFD.exe",
+                search_root / "third_party" / "su2" / "bin" / "SU2_CFD",
+                search_root / "third_party" / "su2" / "bin" / "SU2_CFD.exe",
+                search_root / "third_party" / "su2" / "build" / "bin" / "SU2_CFD",
+                search_root / "third_party" / "su2" / "build" / "bin" / "SU2_CFD.exe",
+            )
+        )
+        for bundled in candidates:
+            if bundled.is_file():
+                return str(bundled)
     resolved = shutil.which(executable)
     if resolved is None and Path(executable).is_file():
         resolved = str(Path(executable).expanduser().resolve())

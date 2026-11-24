@@ -6,11 +6,14 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
+import time
 
 from PySide6.QtCore import QSettings, QTimer, Qt, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QPixmap
 from PySide6.QtWidgets import (
     QAbstractButton,
+    QApplication,
     QCheckBox,
     QComboBox,
     QDockWidget,
@@ -47,6 +50,7 @@ from qt_app import QT_FRONTEND_VERSION
 from qt_app.airfoil_editor import AirfoilEditor
 from qt_app.backend import ApiProcess, OptimizerProcess
 from qt_app.solver_monitor import SolverConvergenceMonitor
+from qt_app.theme import apply_industrial_theme
 from qt_app.vtk_viewer import VTKView
 
 
@@ -74,9 +78,18 @@ ZH_TEXT = {
     "BL growth ratio": "附面层增长率", "BL thickness / chord": "附面层厚度 / 弦长", "Farfield cell size": "远场单元尺寸",
     "Solver": "求解器", "Turbulence": "湍流模型", "Angle of attack": "攻角", "Reynolds": "雷诺数",
     "Temperature [K]": "温度 [K]", "Residual target": "残差目标", "Iterations": "迭代次数", "OpenMP threads": "OpenMP 线程数",
+    "CPU mode": "CPU 模式", "Automatic": "自动", "Manual": "手动", "Live contour update": "求解中更新云图",
+    "Contour interval [s]": "云图刷新间隔 [秒]", "Theme": "主题", "Industrial dark": "工业深色",
+    "Engineering light": "工程浅色", "Deep blue": "深海蓝", "Graphite orange": "石墨橙",
     "Field": "场变量", "Automatic color range": "自动色阶", "Minimum": "最小值", "Maximum": "最大值",
     "Apply field / color range": "应用场变量 / 色阶", "Chord axis + AoA angle": "弦线 + 迎角标注",
-    "Colormap": "云图配色", "Overlay text color": "标注文字颜色", "White": "白色", "Black": "黑色",
+    "Colormap": "云图配色", "Overlay text color": "标注文字颜色", "Axis / AoA color": "弦线 / 迎角颜色",
+    "Mesh annotation color": "网格标注颜色", "Automatic contrast": "自动对比色",
+    "Show mesh edges": "显示网格边线", "Mesh edge color": "网格边线颜色",
+    "Show airfoil outline": "显示翼型轮廓线", "Airfoil outline color": "翼型轮廓线颜色",
+    "Rose pink": "玫瑰粉", "Forest green": "森林绿", "Engineering violet": "工程紫",
+    "Warm sand": "暖沙色",
+    "White": "白色", "Black": "黑色", "Orange": "橙色", "Blue": "蓝色", "Green": "绿色", "Red": "红色", "Cyan": "青色",
     "Overlay position": "信息框位置", "Overlay: airfoil name": "显示：翼型名称", "Overlay: Mach": "显示：马赫数",
     "Overlay: angle of attack": "显示：攻角", "Overlay: Reynolds": "显示：雷诺数", "Overlay: field name": "显示：场变量",
     "Top center": "正上方居中", "Top left": "左上角", "Top right": "右上角",
@@ -141,6 +154,8 @@ class MainWindow(QMainWindow):
         self._active_backend_output: Path | None = None
         self._solver_paused = False
         self._solver_stop_pending = False
+        self._live_flow_signature: tuple[int, int] | None = None
+        self._live_flow_failed_signature: tuple[int, int] | None = None
         self._build_actions()
         self._build_menu_and_toolbar()
         self._build_central()
@@ -152,6 +167,9 @@ class MainWindow(QMainWindow):
         self.convergence_timer = QTimer(self)
         self.convergence_timer.setInterval(750)
         self.convergence_timer.timeout.connect(self.solver_monitor.refresh)
+        self.live_flow_timer = QTimer(self)
+        self.live_flow_timer.timeout.connect(self._refresh_live_flow)
+        self._update_live_flow_timer()
         self._combo_sources: dict[int, list[str]] = {}
         self._tab_sources = [self.tabs.tabText(index) for index in range(self.tabs.count())]
         self._set_language("en")
@@ -175,6 +193,16 @@ class MainWindow(QMainWindow):
         self.settings.setValue("geometry", self.saveGeometry())
         self.settings.setValue("state", self.saveState())
         self.settings.setValue("workdir", self.workdir_edit.text())
+        self.settings.setValue("theme", self.theme_combo.currentData())
+        self.settings.setValue("cpu_mode", self.thread_mode.currentData())
+        self.settings.setValue("threads", self.threads.value())
+        self.settings.setValue("live_contour", self.live_contour.isChecked())
+        self.settings.setValue("live_contour_seconds", self.live_contour_interval.value())
+        self.settings.setValue("mesh_annotation_color", self.mesh_annotation_color.currentData())
+        self.settings.setValue("result_mesh_edges", self.show_result_mesh_edges.isChecked())
+        self.settings.setValue("result_mesh_edge_color", self.result_mesh_edge_color.currentData())
+        self.settings.setValue("show_airfoil_outline", self.show_airfoil_outline.isChecked())
+        self.settings.setValue("airfoil_outline_color", self.airfoil_outline_color.currentData())
         super().closeEvent(event)
 
     def _build_actions(self) -> None:
@@ -243,6 +271,20 @@ class MainWindow(QMainWindow):
         browse.clicked.connect(self._browse_workdir)
         toolbar.addWidget(browse)
         toolbar.addSeparator()
+        toolbar.addWidget(QLabel("Theme"))
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItem("Industrial dark", "dark")
+        self.theme_combo.addItem("Engineering light", "light")
+        self.theme_combo.addItem("Deep blue", "deep_blue")
+        self.theme_combo.addItem("Graphite orange", "graphite")
+        self.theme_combo.addItem("Rose pink", "rose")
+        self.theme_combo.addItem("Forest green", "forest")
+        self.theme_combo.addItem("Engineering violet", "violet")
+        self.theme_combo.addItem("Warm sand", "sand")
+        self.theme_combo.setMinimumWidth(122)
+        self.theme_combo.currentIndexChanged.connect(self._set_theme)
+        toolbar.addWidget(self.theme_combo)
+        toolbar.addSeparator()
         self.language_combo = QComboBox()
         self.language_combo.addItem("English", "en")
         self.language_combo.addItem("中文", "zh")
@@ -251,6 +293,17 @@ class MainWindow(QMainWindow):
             lambda: self._set_language(str(self.language_combo.currentData()))
         )
         toolbar.addWidget(self.language_combo)
+
+    def _set_theme(self, *_args) -> None:
+        theme = str(self.theme_combo.currentData() or "dark")
+        app = QApplication.instance()
+        if app is not None:
+            theme = apply_industrial_theme(app, theme)
+        for viewer_name in ("mesh_viewer", "result_viewer"):
+            viewer = getattr(self, viewer_name, None)
+            if viewer is not None:
+                viewer.set_background(theme)
+        self.settings.setValue("theme", theme)
 
     def _set_language(self, language: str) -> None:
         language = "zh" if language == "zh" else "en"
@@ -435,6 +488,25 @@ class MainWindow(QMainWindow):
         self.mesh_update_button.setProperty("accent", True)
         self.mesh_update_button.clicked.connect(lambda: self._start_backend("mesh"))
         top.addWidget(self.mesh_update_button)
+        top.addWidget(QLabel("Mesh annotation color"))
+        self.mesh_annotation_color = QComboBox()
+        self.mesh_annotation_color.addItem("Automatic contrast", "auto")
+        for label, value in (
+            ("White", "white"),
+            ("Black", "black"),
+            ("Orange", "orange"),
+            ("Blue", "blue"),
+            ("Green", "green"),
+            ("Red", "red"),
+            ("Cyan", "cyan"),
+        ):
+            self.mesh_annotation_color.addItem(label, value)
+        self.mesh_annotation_color.currentIndexChanged.connect(
+            lambda: self.mesh_viewer.set_annotations(
+                text_color=str(self.mesh_annotation_color.currentData() or "auto")
+            )
+        )
+        top.addWidget(self.mesh_annotation_color)
         layout.addLayout(top)
         layout.addWidget(viewer, 1)
         return page
@@ -629,7 +701,16 @@ class MainWindow(QMainWindow):
         self.cfl = _double(5.0, 0.1, 1000.0, 2, 1.0)
         self.residual_min = _double(-8.0, -14.0, -1.0, 2, 0.5)
         self.iterations = _integer(1000, 1, 100000, 100)
-        self.threads = _integer(1, 1, 64, 1)
+        self.auto_threads = max(1, min(8, max(1, (os.cpu_count() or 2) // 2)))
+        self.thread_mode = QComboBox()
+        self.thread_mode.addItem(f"Automatic ({self.auto_threads})", "auto")
+        self.thread_mode.addItem("Manual", "manual")
+        self.threads = _integer(self.auto_threads, 1, 64, 1)
+        self.thread_mode.currentIndexChanged.connect(self._thread_mode_changed)
+        self.live_contour = QCheckBox("Live contour update")
+        self.live_contour.setChecked(True)
+        self.live_contour_interval = _integer(15, 5, 300, 5)
+        self.live_contour_interval.valueChanged.connect(self._update_live_flow_timer)
         for label, widget in (
             ("Solver", self.solver),
             ("Turbulence", self.turbulence),
@@ -640,14 +721,30 @@ class MainWindow(QMainWindow):
             ("CFL", self.cfl),
             ("Residual target", self.residual_min),
             ("Iterations", self.iterations),
+            ("CPU mode", self.thread_mode),
             ("OpenMP threads", self.threads),
+            ("Contour interval [s]", self.live_contour_interval),
         ):
             form.addRow(label, widget)
+        form.addRow(self.live_contour)
+        self._thread_mode_changed()
         button = QPushButton("Run CFD")
         button.setProperty("accent", True)
         button.clicked.connect(lambda: self._start_backend("solve"))
         form.addRow(button)
         return page
+
+    def _thread_mode_changed(self, *_args) -> None:
+        automatic = self.thread_mode.currentData() == "auto"
+        self.threads.setEnabled(not automatic)
+        if automatic:
+            self.threads.setValue(self.auto_threads)
+
+    def _effective_threads(self) -> int:
+        return self.auto_threads if self.thread_mode.currentData() == "auto" else self.threads.value()
+
+    def _update_live_flow_timer(self, *_args) -> None:
+        self.live_flow_timer.setInterval(self.live_contour_interval.value() * 1000)
 
     def _results_properties(self) -> QWidget:
         page, form = self._panel("Display")
@@ -680,10 +777,18 @@ class MainWindow(QMainWindow):
         self.overlay_position.setCurrentIndex(2)
         form.addRow("Overlay position", self.overlay_position)
         self.overlay_text_color = QComboBox()
-        self.overlay_text_color.addItem("White", "white")
-        self.overlay_text_color.addItem("Black", "black")
+        self.axis_color = QComboBox()
+        for label, value in (
+            ("White", "white"), ("Black", "black"), ("Orange", "orange"),
+            ("Blue", "blue"), ("Green", "green"), ("Red", "red"), ("Cyan", "cyan"),
+        ):
+            self.overlay_text_color.addItem(label, value)
+            self.axis_color.addItem(label, value)
+        self.axis_color.setCurrentIndex(self.axis_color.findData("orange"))
         form.addRow("Overlay text color", self.overlay_text_color)
+        form.addRow("Axis / AoA color", self.axis_color)
         self.overlay_text_color.currentIndexChanged.connect(self._update_result_annotations)
+        self.axis_color.currentIndexChanged.connect(self._update_result_annotations)
         self.colormap = QComboBox()
         for label, value in (
             ("Jet", "jet"),
@@ -696,6 +801,36 @@ class MainWindow(QMainWindow):
             self.colormap.addItem(label, value)
         form.addRow("Colormap", self.colormap)
         self.colormap.currentIndexChanged.connect(self._update_colormap)
+        self.show_result_mesh_edges = QCheckBox("Show mesh edges")
+        self.result_mesh_edge_color = QComboBox()
+        for label, value in (
+            ("White", "white"), ("Black", "black"), ("Orange", "orange"),
+            ("Blue", "blue"), ("Green", "green"), ("Red", "red"), ("Cyan", "cyan"),
+        ):
+            self.result_mesh_edge_color.addItem(label, value)
+        self.result_mesh_edge_color.setCurrentIndex(
+            self.result_mesh_edge_color.findData("black")
+        )
+        form.addRow(self.show_result_mesh_edges)
+        form.addRow("Mesh edge color", self.result_mesh_edge_color)
+        self.show_result_mesh_edges.toggled.connect(self._update_result_mesh_edges)
+        self.result_mesh_edge_color.currentIndexChanged.connect(
+            self._update_result_mesh_edges
+        )
+        self.show_airfoil_outline = QCheckBox("Show airfoil outline")
+        self.show_airfoil_outline.setChecked(True)
+        self.airfoil_outline_color = QComboBox()
+        for label, value in (
+            ("White", "white"), ("Black", "black"), ("Orange", "orange"),
+            ("Blue", "blue"), ("Green", "green"), ("Red", "red"), ("Cyan", "cyan"),
+        ):
+            self.airfoil_outline_color.addItem(label, value)
+        form.addRow(self.show_airfoil_outline)
+        form.addRow("Airfoil outline color", self.airfoil_outline_color)
+        self.show_airfoil_outline.toggled.connect(self._update_airfoil_outline)
+        self.airfoil_outline_color.currentIndexChanged.connect(
+            self._update_airfoil_outline
+        )
         self.overlay_position.currentIndexChanged.connect(self._update_result_annotations)
         for widget, checked in (
             (self.overlay_airfoil, True),
@@ -718,6 +853,7 @@ class MainWindow(QMainWindow):
             show_axis=self.show_axis.isChecked(),
             position=self.overlay_position.currentData(),
             text_color=self.overlay_text_color.currentData(),
+            axis_color=self.axis_color.currentData(),
             airfoil=self.overlay_airfoil.isChecked(),
             mach=self.overlay_mach.isChecked(),
             aoa=self.overlay_aoa.isChecked(),
@@ -727,6 +863,18 @@ class MainWindow(QMainWindow):
 
     def _update_colormap(self, *_args) -> None:
         self.result_viewer.set_colormap(str(self.colormap.currentData()))
+
+    def _update_result_mesh_edges(self, *_args) -> None:
+        self.result_viewer.set_mesh_edges(
+            self.show_result_mesh_edges.isChecked(),
+            str(self.result_mesh_edge_color.currentData() or "black"),
+        )
+
+    def _update_airfoil_outline(self, *_args) -> None:
+        self.result_viewer.set_airfoil_outline(
+            self.show_airfoil_outline.isChecked(),
+            str(self.airfoil_outline_color.currentData() or "white"),
+        )
 
     def _optimization_properties(self) -> QWidget:
         page, form = self._panel("Adjoint optimization")
@@ -830,7 +978,48 @@ class MainWindow(QMainWindow):
             self.restoreState(state)
         workdir = self.settings.value("workdir")
         if workdir:
-            self.workdir_edit.setText(str(workdir))
+            saved = Path(str(workdir)).expanduser()
+            lowered = str(saved).replace("/", "\\").lower()
+            if "\\build\\pytest_" not in lowered:
+                self.workdir_edit.setText(str(saved))
+        theme = str(self.settings.value("theme", "dark"))
+        theme_index = self.theme_combo.findData(theme)
+        self.theme_combo.setCurrentIndex(max(0, theme_index))
+        self._set_theme()
+        cpu_mode = str(self.settings.value("cpu_mode", "auto"))
+        cpu_index = self.thread_mode.findData(cpu_mode)
+        self.thread_mode.setCurrentIndex(max(0, cpu_index))
+        self.threads.setValue(int(self.settings.value("threads", self.auto_threads)))
+        self._thread_mode_changed()
+        self.live_contour.setChecked(
+            str(self.settings.value("live_contour", "true")).lower() not in {"false", "0"}
+        )
+        self.live_contour_interval.setValue(
+            int(self.settings.value("live_contour_seconds", 15))
+        )
+        self._update_live_flow_timer()
+        mesh_text_color = str(self.settings.value("mesh_annotation_color", "auto"))
+        mesh_text_index = self.mesh_annotation_color.findData(mesh_text_color)
+        self.mesh_annotation_color.setCurrentIndex(max(0, mesh_text_index))
+        self.mesh_viewer.set_annotations(
+            text_color=str(self.mesh_annotation_color.currentData() or "auto")
+        )
+        self.show_result_mesh_edges.setChecked(
+            str(self.settings.value("result_mesh_edges", "false")).lower()
+            not in {"false", "0"}
+        )
+        edge_color = str(self.settings.value("result_mesh_edge_color", "black"))
+        edge_index = self.result_mesh_edge_color.findData(edge_color)
+        self.result_mesh_edge_color.setCurrentIndex(max(0, edge_index))
+        self._update_result_mesh_edges()
+        self.show_airfoil_outline.setChecked(
+            str(self.settings.value("show_airfoil_outline", "true")).lower()
+            not in {"false", "0"}
+        )
+        outline_color = str(self.settings.value("airfoil_outline_color", "white"))
+        outline_index = self.airfoil_outline_color.findData(outline_color)
+        self.airfoil_outline_color.setCurrentIndex(max(0, outline_index))
+        self._update_airfoil_outline()
 
     def _reset_layout(self) -> None:
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.pipeline_dock)
@@ -881,6 +1070,12 @@ class MainWindow(QMainWindow):
         case = Path(case_text).expanduser().resolve() if case_text else self.current_case
         if case is None:
             raise ValueError("Run direct CFD first or select a solved case directory.")
+        free_gib = shutil.disk_usage(case).free / (1024 ** 3)
+        if free_gib < 5.0:
+            raise OSError(
+                f"The optimization drive has only {free_gib:.2f} GiB free. "
+                "Move the direct-flow case to a drive with at least 5 GiB free first."
+            )
         su2_bin_text = self.su2_bin.text().strip()
         su2_bin = Path(su2_bin_text).expanduser().resolve() if su2_bin_text else self._discover_adjoint_bin()
         if su2_bin is None:
@@ -926,7 +1121,7 @@ class MainWindow(QMainWindow):
             {
                 "adjoint_iterations": self.adjoint_iterations.value(),
                 "adjoint_cfl": self.adjoint_cfl.value(),
-                "threads": self.threads.value(),
+                "threads": self._effective_threads(),
             }
         )
         payload["case"].update(
@@ -1146,7 +1341,7 @@ class MainWindow(QMainWindow):
             "cfl": self.cfl.value(),
             "residual_min": self.residual_min.value(),
             "iterations": self.iterations.value(),
-            "threads": self.threads.value(),
+            "threads": self._effective_threads(),
             "language": "zh",
         }
 
@@ -1156,6 +1351,16 @@ class MainWindow(QMainWindow):
             return
         workdir = Path(self.workdir_edit.text()).expanduser()
         workdir.mkdir(parents=True, exist_ok=True)
+        required_gib = 2.0 if mode == "solve" else 0.5
+        free_gib = shutil.disk_usage(workdir).free / (1024 ** 3)
+        if free_gib < required_gib:
+            QMessageBox.critical(
+                self,
+                "Insufficient disk space",
+                f"{workdir.drive or workdir.anchor} has only {free_gib:.2f} GiB free. "
+                f"Select a work directory with at least {required_gib:.1f} GiB free.",
+            )
+            return
         try:
             airfoil = self.editor.ensure_exported()
         except Exception as exc:
@@ -1177,8 +1382,13 @@ class MainWindow(QMainWindow):
         if mode == "solve":
             self._solver_paused = False
             self._solver_stop_pending = False
+            self._live_flow_signature = None
+            self._live_flow_failed_signature = None
             self.solver_monitor.start(output / "history.csv")
             self.convergence_timer.start()
+            if self.live_contour.isChecked():
+                self._update_live_flow_timer()
+                self.live_flow_timer.start()
             self.tabs.setCurrentIndex(2)
         try:
             self.backend.start_request(request)
@@ -1186,6 +1396,42 @@ class MainWindow(QMainWindow):
             self.progress.setRange(0, 100)
             self.progress.setValue(0)
             QMessageBox.critical(self, "Backend start failed", str(exc))
+
+    def _refresh_live_flow(self) -> None:
+        """Load a stable newly-written SU2 field without resetting the user's camera."""
+        if self._active_backend_mode != "solve" or self._active_backend_output is None:
+            return
+        flow_path = self._active_backend_output / "flow.vtu"
+        try:
+            stat = flow_path.stat()
+        except OSError:
+            return
+        signature = (stat.st_mtime_ns, stat.st_size)
+        if signature == self._live_flow_signature or stat.st_size < 1024:
+            return
+        # SU2 replaces a large VTU over a short interval.  Waiting until the
+        # timestamp is old enough avoids parsing a partially written XML file.
+        if time.time() - stat.st_mtime < 1.5:
+            return
+        first_live_contour = self._live_flow_signature is None
+        try:
+            self.result_viewer.load_vtu(
+                flow_path, preserve_view=self.result_viewer.dataset is not None
+            )
+        except Exception as exc:
+            if signature != self._live_flow_failed_signature:
+                self._log(f"Live contour update deferred: {exc}")
+                self._live_flow_failed_signature = signature
+            return
+        self._live_flow_signature = signature
+        self._live_flow_failed_signature = None
+        self.result_display_tabs.setCurrentIndex(0)
+        if first_live_contour:
+            self.tabs.setCurrentIndex(3)
+        self._set_status(
+            f"Live contour updated · {stat.st_size / (1024 * 1024):.1f} MiB · "
+            f"{self._effective_threads()} OpenMP threads"
+        )
 
     def _running_changed(self, running: bool) -> None:
         self.action_mesh.setEnabled(not running and not self.optimizer.running)
@@ -1197,6 +1443,7 @@ class MainWindow(QMainWindow):
             self.progress.setRange(0, 100)
 
     def _backend_finished(self, result: dict) -> None:
+        self.live_flow_timer.stop()
         self.progress.setRange(0, 100)
         self.progress.setValue(100)
         self.current_case = Path(result["output_dir"])
@@ -1229,6 +1476,7 @@ class MainWindow(QMainWindow):
         self._update_solver_controls()
 
     def _backend_failed(self, message: str) -> None:
+        self.live_flow_timer.stop()
         self.convergence_timer.stop()
         self.solver_monitor.refresh()
         self.progress.setRange(0, 100)

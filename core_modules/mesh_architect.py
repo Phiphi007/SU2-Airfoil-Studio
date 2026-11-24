@@ -41,12 +41,27 @@ DOMAIN_SCALE_MAX = 10.0
 
 def _load_gmsh() -> Any:
     """仅为可选的 GUI 预览加载 Gmsh。"""
+    import importlib
+    import os
+    import sys
+
+    override = os.environ.get("SU2_STUDIO_GMSH_PYTHON_PATH")
+    if override:
+        module_dir = Path(override).expanduser().resolve()
+        if not module_dir.is_dir():
+            raise FileNotFoundError(f"Gmsh Python directory does not exist: {module_dir}")
+        if str(module_dir) not in sys.path:
+            sys.path.insert(0, str(module_dir))
+        # Do not retain a module imported from a previous configured runtime.
+        sys.modules.pop("gmsh", None)
+        importlib.invalidate_caches()
     try:
         import gmsh  # type: ignore
     except (ImportError, OSError) as exc:
         raise RuntimeError(
             "无法加载 Gmsh 预览器。网格已经生成，可直接打开 mesh.msh；"
-            "如需内置预览，请安装 requirements.txt 中的 gmsh。"
+            "如需内置预览，请设置 SU2_STUDIO_GMSH_PYTHON_PATH，"
+            "或安装 requirements.txt 中的 gmsh。"
         ) from exc
     return gmsh
 

@@ -42,6 +42,10 @@ The desktop layer is being migrated to PySide6 (Qt 6) with a ParaView-style dock
 | Selectable colormap / 可选云图配色 | Working / 可用 | Jet, Turbo, Viridis, Plasma, Coolwarm, gray |
 | Live convergence monitor / 实时收敛监视 | Working / 可用 | residual, CD and CL from `history.csv` |
 | CST/D-BCE/hybrid/relay adjoint / 伴随优化 | Working / 可用 | existing optimizer + SU2 AD |
+| Automatic/manual OpenMP / 自动或手动多核 | Working / 可用 | SU2 `-t N`, shared by direct and adjoint solves |
+| Live field refresh / 求解中云图刷新 | Working / 可用 | stable `flow.vtu` polling with camera/range preservation |
+| Four UI themes / 四套界面主题 | Working / 可用 | dark, light, deep blue and graphite orange |
+| Independent annotation colors / 独立标注颜色 | Working / 可用 | metadata text and chord/AoA colors selected separately |
 
 ## 云图交互与标注 / Field interaction and annotation
 
@@ -95,6 +99,20 @@ The generated desktop executable is `SU2_Airfoil_Studio_Qt.exe`, sharing backend
 Qt 入口位于 `qt_app/main.py`，主窗口位于 `qt_app/main_window.py`。网格与直接求解通过 `portable_api.py` 的 JSON 协议运行；伴随优化通过单独的 Qt 进程对象运行，因此长计算不会阻塞界面。
 
 The Qt entry point is `qt_app/main.py`, and the main window is `qt_app/main_window.py`. Meshing and direct solves use the JSON protocol in `portable_api.py`; adjoint optimization uses a separate Qt process object so long runs do not block the interface.
+
+直接流和伴随求解默认使用自动 OpenMP：取逻辑处理器数量的一半且最多 8 线程，也可切换为手动 1–64 线程。求解器每 100 步保存一次 `flow.vtu`；界面按用户设定的 5–300 秒周期检查新文件，文件稳定后才重载，并保留当前相机、场变量和自定义色阶。刷新周期不会强迫 SU2 额外写盘，因此不会用半写入文件换取“看似实时”的显示。
+
+Direct and adjoint solves default to automatic OpenMP: half the logical processor count, capped at eight threads, with a manual 1–64 option. SU2 saves `flow.vtu` every 100 iterations; the UI checks for a new file at a user-selected 5–300 second interval, reloads only after the file is stable, and preserves the active camera, field and custom color range. The timer does not force extra SU2 writes, avoiding partially written data for the sake of superficial real-time display.
+
+## C++ Linux PR 的选择性吸收 / Selective adoption from the C++ Linux PR
+
+Linux Qt/C++ 原型被视为参考前端，而不是当前稳定界面的直接替代品。当前版本已吸收其可移植后端设计：冻结或源码运行时均可在 Windows/Linux 目录结构中发现 SU2，可通过 `SU2_STUDIO_GMSH_PYTHON_PATH` 指定 Gmsh 模块目录，每个 API 算例保存 `case_request.json`，`info` 返回 Gmsh 与全部伴随程序诊断，并新增 `optimize` JSON 模式。优化入口只接受 `residual_target_met=true` 的成功直接流算例，避免把“进程正常退出”误当作气动收敛。
+
+The Linux Qt/C++ prototype is treated as a reference frontend rather than a drop-in replacement for the stable desktop. The production backend now adopts its portable-runtime design: source and frozen layouts discover SU2 on Windows and Linux, `SU2_STUDIO_GMSH_PYTHON_PATH` may select the Gmsh module directory, every API case stores `case_request.json`, `info` reports Gmsh and all adjoint executables, and the JSON API exposes an `optimize` mode. Optimization accepts only successful direct cases with `residual_target_met=true`, so normal process exit cannot be mistaken for aerodynamic convergence.
+
+尚未吸收的 C++ 页面会继续保持 Preview：在旧 BCE 约束拖动、实时求解控制、任意 VTK 标量/色阶、完整伴随监视以及真实收敛案例达到功能一致前，不替换当前 PySide6/VTK 工作区。
+
+The remaining C++ pages stay Preview-only. They will not replace the current PySide6/VTK workspace until legacy-BCE constrained dragging, live solver control, arbitrary VTK scalars/ranges, full adjoint monitoring and genuinely converged validation cases reach feature parity.
 
 ## 迁移策略 / Migration policy
 

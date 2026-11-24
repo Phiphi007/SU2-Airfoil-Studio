@@ -135,6 +135,8 @@ def result_files(output: Path) -> dict:
 
 
 def execute(request: dict) -> tuple[dict, int]:
+    if isinstance(request, dict) and request.get("mode") == "optimize":
+        return execute_optimization(request)
     from main_pipeline import run_pipeline
     from core_modules.process_control import ProcessController
     from core_modules.solver_control import SolverControlMonitor
@@ -146,6 +148,11 @@ def execute(request: dict) -> tuple[dict, int]:
             output.mkdir(parents=True, exist_ok=False)
         except FileExistsError as exc:
             raise RequestError("output_dir was created by another request; choose a new directory.") from exc
+        # Keep the exact, versioned input next to generated artifacts.  This is
+        # required for reproducibility and lets a native GUI reopen the case.
+        (output / "case_request.json").write_text(
+            json.dumps(request, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
     response = {"api_version": API_VERSION, "version": VERSION, "mode": mode,
                 "output_dir": str(output), "ok": True, "status": "completed"}
     exit_code = 0
@@ -194,17 +201,134 @@ def execute(request: dict) -> tuple[dict, int]:
     return response, exit_code
 
 
+def execute_optimization(request: dict) -> tuple[dict, int]:
+    """Run a converged API case through the discrete-adjoint optimizer."""
+    from core_modules.su2_driver import _resolve_executable
+    from parametric_adjoint.bridge import prepare_case_config
+    from parametric_adjoint.config import load_config
+    from parametric_adjoint.optimizer import AdjointOptimizer
+
+    allowed = {"api_version", "mode", "case_dir", "output_dir", "method", "steps"}
+    unknown = set(request) - allowed
+    if unknown:
+        raise RequestError(f"Unknown optimization fields: {sorted(unknown)}")
+    if request.get("api_version", API_VERSION) != API_VERSION:
+        raise RequestError("Only api_version=1 is supported.")
+
+    method = request.get("method", "cst")
+    if method not in ("cst", "bce", "hybrid", "relay"):
+        raise RequestError("method must be cst, bce, hybrid, or relay.")
+    steps = request.get("steps", 3)
+    if type(steps) is not int or not 1 <= steps <= 100:
+        raise RequestError("steps must be an integer from 1 to 100.")
+
+    case_value = request.get("case_dir")
+    output_value = request.get("output_dir")
+    if not isinstance(case_value, str) or not case_value.strip():
+        raise RequestError("case_dir must be a non-empty path.")
+    if not isinstance(output_value, str) or not output_value.strip():
+        raise RequestError("output_dir must be a non-empty path.")
+    case_dir = Path(case_value).expanduser().resolve()
+    output = Path(output_value).expanduser().resolve()
+    if output.exists():
+        raise RequestError("output_dir already exists; choose a new optimization directory.")
+
+    result_file = case_dir / "api_result.json"
+    if not result_file.is_file():
+        raise RequestError("Optimization requires a completed API CFD case.")
+    baseline = json.loads(result_file.read_text(encoding="utf-8"))
+    if baseline.get("mode") != "solve" or baseline.get("ok") is not True:
+        raise RequestError("Optimization requires a successful direct CFD case.")
+    if baseline.get("residual_target_met") is not True:
+        raise RequestError(
+            "The direct CFD case has not met its residual target. Converge it before optimization."
+        )
+
+    su2_bin = Path(_resolve_executable("SU2_CFD")).parent
+    output.mkdir(parents=True)
+    (output / "case_request.json").write_text(
+        json.dumps(request, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    response = {
+        "api_version": API_VERSION,
+        "version": VERSION,
+        "mode": "optimize",
+        "output_dir": str(output),
+        "ok": True,
+        "status": "completed",
+    }
+    try:
+        config_file = prepare_case_config(
+            case_dir=case_dir,
+            su2_bin=su2_bin,
+            output_config=output / "optimization_config.json",
+            runtime_bin=None,
+            mode=method,
+            objective_mode="fixed_aoa",
+            target_cl=None,
+            dcl_dalpha=None,
+            dcd_dcl=None,
+        )
+        config_payload = json.loads(config_file.read_text(encoding="utf-8"))
+        config_payload["steps"] = steps
+        config_payload["output"] = str(output)
+        config_file.write_text(
+            json.dumps(config_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        with (output / "optimization.log").open("w", encoding="utf-8") as log:
+            def progress(message: str) -> None:
+                line = f"[Progress] {message}\n"
+                log.write(line)
+                log.flush()
+                sys.stderr.write(line)
+                sys.stderr.flush()
+
+            response["study"] = AdjointOptimizer(
+                load_config(config_file), progress=progress
+            ).run()
+    except Exception as exc:
+        response.update(
+            ok=False,
+            status="failed",
+            error={"type": type(exc).__name__, "message": str(exc)},
+        )
+
+    response["files"] = result_files(output)
+    result_path = output / "api_result.json"
+    response["files"][result_path.name] = str(result_path)
+    result_path.write_text(
+        json.dumps(response, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8"
+    )
+    return response, 0 if response["ok"] else 1
+
+
 def info() -> dict:
     from core_modules.su2_driver import _resolve_executable
     try:
         solver = _resolve_executable("SU2_CFD")
     except FileNotFoundError:
         solver = None
+    try:
+        from core_modules.mesh_architect import _load_gmsh
+        gmsh_version = _load_gmsh().__version__
+    except (FileNotFoundError, ImportError, OSError, RuntimeError):
+        gmsh_version = None
+    adjoint = {}
+    if solver:
+        solver_dir = Path(solver).parent
+        suffix = ".exe" if os.name == "nt" else ""
+        adjoint = {
+            name: str(solver_dir / f"{name}{suffix}")
+            if (solver_dir / f"{name}{suffix}").is_file()
+            else None
+            for name in ("SU2_CFD_AD", "SU2_DOT_AD", "SU2_DEF")
+        }
     return {"api_version": API_VERSION, "version": VERSION, "ok": True,
             "frozen": bool(getattr(sys, "frozen", False)), "platform": sys.platform,
             "application_dir": str(application_root()), "resources_dir": str(resource_root()),
             "default_data_dir": str(data_root()), "su2_executable": solver,
-            "modes": ["mesh", "solve", "report"]}
+            "gmsh_version": gmsh_version, "adjoint_executables": adjoint,
+            "modes": ["mesh", "solve", "report", "optimize"]}
 
 
 def main(argv: list[str] | None = None) -> int:

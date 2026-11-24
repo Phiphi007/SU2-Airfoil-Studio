@@ -49,6 +49,28 @@ except ImportError:
 
 VTK_ENABLED = VTK_AVAILABLE and os.environ.get("QT_QPA_PLATFORM", "").lower() != "offscreen"
 
+DISPLAY_COLORS = {
+    "white": "#F5F5F5",
+    "black": "#101010",
+    "orange": "#F59E42",
+    "blue": "#39A9F4",
+    "green": "#4DD17A",
+    "red": "#EF5B5B",
+    "cyan": "#32D5D2",
+}
+
+LIGHT_VIEW_THEMES = {"light", "sand"}
+
+
+def _display_color(value: str, default: str = "white") -> tuple[float, float, float]:
+    text = DISPLAY_COLORS.get(str(value).lower(), str(value))
+    if not text.startswith("#") or len(text) != 7:
+        text = DISPLAY_COLORS[default]
+    try:
+        return tuple(int(text[index:index + 2], 16) / 255.0 for index in (1, 3, 5))
+    except ValueError:
+        return _display_color(default, "white")
+
 
 def _lookup_table(name: str = "jet") -> "vtkLookupTable":
     """Build a VTK lookup table from the same perceptual maps used in reports."""
@@ -144,7 +166,14 @@ class VTKView(QWidget):
         }
         self.annotation_position = "top_right"
         self.annotation_text_color = "white"
+        self.axis_color = "orange"
+        self.mesh_edges_visible = False
+        self.mesh_edge_color = "black"
+        self.airfoil_outline_visible = True
+        self.airfoil_outline_color = "white"
+        self.airfoil_actor = None
         self.colormap_name = "jet"
+        self.current_theme = "dark"
         self.show_axis = True
         self.axis_actor = None
         self.angle_actor = None
@@ -211,6 +240,7 @@ class VTKView(QWidget):
             return
         self.renderer.RemoveAllViewProps()
         self.dataset = self.mapper = self.actor = self.scalar_bar = None
+        self.airfoil_actor = None
         self.current_field = ""
         self.airfoil_points = None
         self.case_metadata = {}
@@ -233,9 +263,14 @@ class VTKView(QWidget):
         else:
             actor.GetProperty().SetRepresentationToSurface()
             actor.GetProperty().LightingOff()
+            actor.GetProperty().SetEdgeVisibility(self.mesh_edges_visible)
+            actor.GetProperty().SetEdgeColor(
+                *_display_color(self.mesh_edge_color, "black")
+            )
         self.renderer.AddActor(actor)
         self.dataset, self.mapper, self.actor = dataset, mapper, actor
         self.scalar_bar = None
+        self.airfoil_actor = None
         self.axis_actor = self.angle_actor = self.info_actor = None
         self.reset_camera()
 
@@ -273,10 +308,20 @@ class VTKView(QWidget):
             f"{len(imported.markers)} markers"
         )
 
-    def load_vtu(self, path: str | Path) -> list[str]:
+    def load_vtu(self, path: str | Path, *, preserve_view: bool = False) -> list[str]:
         if not VTK_ENABLED:
             raise RuntimeError("VTK is not installed.")
         path = Path(path).expanduser().resolve()
+        previous_field = self.current_field
+        previous_auto = self.auto_range
+        previous_range = self.custom_range
+        camera_state = None
+        if preserve_view and self.renderer is not None and self.dataset is not None:
+            camera = self.renderer.GetActiveCamera()
+            camera_state = (
+                camera.GetPosition(), camera.GetFocalPoint(), camera.GetViewUp(),
+                camera.GetParallelScale(),
+            )
         reader = vtkXMLUnstructuredGridReader()
         reader.SetFileName(str(path))
         reader.Update()
@@ -297,14 +342,24 @@ class VTKView(QWidget):
             for index in range(data.GetNumberOfArrays())
             if data.GetArrayName(index)
         ]
-        preferred = next((name for name in fields if name.lower() in {"mach", "mach_number"}), None)
+        preferred = previous_field if preserve_view and previous_field in fields else None
+        preferred = preferred or next((name for name in fields if name.lower() in {"mach", "mach_number"}), None)
         if preferred is None and fields:
             preferred = fields[0]
         if preferred:
-            self.set_field(preferred, auto=True)
+            limits = previous_range if preserve_view and not previous_auto else None
+            self.set_field(preferred, auto=previous_auto if preserve_view else True, limits=limits)
         self.fieldsChanged.emit(fields)
         self._refresh_annotations()
-        self.reset_camera()
+        if camera_state is None:
+            self.reset_camera()
+        else:
+            camera = self.renderer.GetActiveCamera()
+            camera.SetPosition(*camera_state[0])
+            camera.SetFocalPoint(*camera_state[1])
+            camera.SetViewUp(*camera_state[2])
+            camera.SetParallelScale(camera_state[3])
+            self._render()
         self.status.emit(
             f"VTK field: {detached.GetNumberOfPoints():,} points, "
             f"{detached.GetNumberOfCells():,} cells, {len(fields)} arrays"
@@ -336,10 +391,14 @@ class VTKView(QWidget):
         mapper.SetInputData(poly)
         actor = vtkActor()
         actor.SetMapper(mapper)
-        actor.GetProperty().SetColor(0.88, 0.88, 0.88)
+        actor.GetProperty().SetColor(
+            *_display_color(self.airfoil_outline_color, "white")
+        )
         actor.GetProperty().SetLineWidth(2.0)
         actor.GetProperty().LightingOff()
+        actor.SetVisibility(self.airfoil_outline_visible)
         self.renderer.AddActor(actor)
+        self.airfoil_actor = actor
 
     def _remove_annotation_actors(self) -> None:
         for actor in (self.axis_actor, self.angle_actor, self.info_actor):
@@ -413,7 +472,8 @@ class VTKView(QWidget):
                         pivot + radius * np.column_stack((np.cos(angles), np.sin(angles))),
                     )
                 )
-                self.axis_actor = self._polyline_actor(chord_line, (1.0, 0.56, 0.16), 2.0)
+                axis_color = _display_color(self.axis_color, "orange")
+                self.axis_actor = self._polyline_actor(chord_line, axis_color, 2.0)
                 self.renderer.AddActor(self.axis_actor)
                 mid_angle = base_angle + 0.5 * math.radians(aoa)
                 label_position = (
@@ -427,7 +487,7 @@ class VTKView(QWidget):
                     float(label_position[0]), float(label_position[1]), 2.0e-8
                 )
                 text = self.angle_actor.GetTextProperty()
-                text.SetColor(1.0, 0.72, 0.32)
+                text.SetColor(*axis_color)
                 text.SetFontSize(16)
                 text.BoldOn()
                 self.renderer.AddActor(self.angle_actor)
@@ -471,8 +531,10 @@ class VTKView(QWidget):
             else:
                 prop.SetJustificationToRight()
             prop.SetVerticalJustificationToTop()
-            color = (0.03, 0.03, 0.03) if self.annotation_text_color == "black" else (0.96, 0.96, 0.96)
-            prop.SetColor(*color)
+            text_color = self.annotation_text_color
+            if text_color == "auto":
+                text_color = "black" if self.current_theme in LIGHT_VIEW_THEMES else "white"
+            prop.SetColor(*_display_color(text_color, "white"))
             prop.SetFontSize(15)
             prop.SetFontFamilyToArial()
             prop.BoldOn()
@@ -485,17 +547,49 @@ class VTKView(QWidget):
         show_axis: bool | None = None,
         position: str | None = None,
         text_color: str | None = None,
+        axis_color: str | None = None,
         **items: bool,
     ) -> None:
         if show_axis is not None:
             self.show_axis = bool(show_axis)
         if position in {"top_center", "top_left", "top_right"}:
             self.annotation_position = position
-        if text_color in {"white", "black"}:
+        if text_color == "auto" or text_color in DISPLAY_COLORS or (
+            isinstance(text_color, str) and text_color.startswith("#")
+        ):
             self.annotation_text_color = text_color
+        if axis_color in DISPLAY_COLORS or (isinstance(axis_color, str) and axis_color.startswith("#")):
+            self.axis_color = axis_color
         for key, value in items.items():
             if key in self.annotation_items:
                 self.annotation_items[key] = bool(value)
+        self._refresh_annotations()
+
+    def set_background(self, theme: str) -> None:
+        if not VTK_ENABLED or self.renderer is None:
+            return
+        backgrounds = {
+            "dark": ((0.075, 0.075, 0.08), (0.12, 0.12, 0.125)),
+            "light": ((0.86, 0.87, 0.88), (0.98, 0.98, 0.99)),
+            "deep_blue": ((0.035, 0.075, 0.105), (0.075, 0.15, 0.20)),
+            "graphite": ((0.09, 0.095, 0.10), (0.17, 0.18, 0.19)),
+            "rose": ((0.105, 0.06, 0.09), (0.20, 0.12, 0.17)),
+            "forest": ((0.045, 0.085, 0.07), (0.10, 0.17, 0.14)),
+            "violet": ((0.065, 0.05, 0.10), (0.14, 0.11, 0.20)),
+            "sand": ((0.82, 0.79, 0.72), (0.96, 0.94, 0.89)),
+        }
+        self.current_theme = theme if theme in backgrounds else "dark"
+        first, second = backgrounds[self.current_theme]
+        self.renderer.SetBackground(*first)
+        self.renderer.SetBackground2(*second)
+        if self.scalar_bar is not None:
+            color = (
+                (0.08, 0.08, 0.08)
+                if self.current_theme in LIGHT_VIEW_THEMES
+                else (0.9, 0.9, 0.9)
+            )
+            self.scalar_bar.GetTitleTextProperty().SetColor(*color)
+            self.scalar_bar.GetLabelTextProperty().SetColor(*color)
         self._refresh_annotations()
 
     def set_colormap(self, name: str) -> None:
@@ -508,6 +602,32 @@ class VTKView(QWidget):
             self.mapper.SetLookupTable(table)
             if self.scalar_bar is not None:
                 self.scalar_bar.SetLookupTable(table)
+            self._render()
+
+    def set_mesh_edges(self, visible: bool, color: str | None = None) -> None:
+        """Overlay result-cell edges without rebuilding or copying the dataset."""
+        self.mesh_edges_visible = bool(visible)
+        if color in DISPLAY_COLORS or (
+            isinstance(color, str) and color.startswith("#")
+        ):
+            self.mesh_edge_color = color
+        if self.actor is not None:
+            prop = self.actor.GetProperty()
+            prop.SetEdgeVisibility(self.mesh_edges_visible)
+            prop.SetEdgeColor(*_display_color(self.mesh_edge_color, "black"))
+            self._render()
+
+    def set_airfoil_outline(self, visible: bool, color: str | None = None) -> None:
+        self.airfoil_outline_visible = bool(visible)
+        if color in DISPLAY_COLORS or (
+            isinstance(color, str) and color.startswith("#")
+        ):
+            self.airfoil_outline_color = color
+        if self.airfoil_actor is not None:
+            self.airfoil_actor.SetVisibility(self.airfoil_outline_visible)
+            self.airfoil_actor.GetProperty().SetColor(
+                *_display_color(self.airfoil_outline_color, "white")
+            )
             self._render()
 
     def _field_values(self, name: str) -> np.ndarray:
@@ -567,8 +687,9 @@ class VTKView(QWidget):
         self.scalar_bar.SetHeight(0.80)
         self.scalar_bar.SetMaximumWidthInPixels(90)
         self.scalar_bar.SetTextPositionToPrecedeScalarBar()
+        scalar_text = (0.08, 0.08, 0.08) if self.current_theme == "light" else (0.9, 0.9, 0.9)
         for prop in (self.scalar_bar.GetTitleTextProperty(), self.scalar_bar.GetLabelTextProperty()):
-            prop.SetColor(0.9, 0.9, 0.9)
+            prop.SetColor(*scalar_text)
             prop.SetFontFamilyToArial()
         self.renderer.AddViewProp(self.scalar_bar)
         self.current_field = name
