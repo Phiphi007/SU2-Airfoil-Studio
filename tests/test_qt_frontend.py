@@ -26,9 +26,17 @@ def application():
 
 def test_qt_workspace_and_bce_handoff(application, tmp_path: Path) -> None:
     assert application.font().family() == "Noto Sans CJK SC"
+    assert "checkmark.svg" in application.styleSheet()
+    assert "@CHECK_ICON@" not in application.styleSheet()
     window = MainWindow()
     window.workdir_edit.setText(str(tmp_path))
     assert window.tabs.count() == 5
+    assert window.workflow_stepper.current_step == 0
+    assert window.workflow_stepper.completed_steps == {0}
+    window.workflow_stepper.stepClicked.emit(2)
+    assert window.tabs.currentIndex() == 2
+    assert window.workflow_stepper.current_step == 2
+    window.tabs.setCurrentIndex(0)
     assert window.mesh_viewer is not window.result_viewer
     assert window.mesh_viewer.allow_rotation is False
     assert window.result_display_tabs.indexOf(window.result_viewer) == 0
@@ -152,12 +160,15 @@ def test_mesh_staleness_and_live_solver_monitor(application, tmp_path: Path) -> 
     window._mark_mesh_current()
     assert not window.mesh_update_button.isEnabled()
     assert window.mesh_update_button.text() == "Mesh up to date"
+    assert {0, 1}.issubset(window.workflow_stepper.completed_steps)
 
     window.editor.canvas.parameters[0] += 0.002
     window.editor.canvas._redraw()
     application.processEvents()
     assert window.mesh_update_button.isEnabled()
     assert window.mesh_update_button.text() == "Airfoil changed — update mesh"
+    assert 0 in window.workflow_stepper.completed_steps
+    assert 1 not in window.workflow_stepper.completed_steps
 
     history = tmp_path / "history.csv"
     history.write_text(

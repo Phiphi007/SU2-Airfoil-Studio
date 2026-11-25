@@ -99,6 +99,14 @@ class GeometryLayoutTests(unittest.TestCase):
         app.mesh_defaults_button.invoke()
         self.assertEqual(float(app.global_refinement_var.get()), 1.0)
 
+    def test_checkbuttons_use_checkmark_images_instead_of_clam_x(self) -> None:
+        app = self.make_app()
+        layout = ttk.Style(app).layout("Industrial.TCheckbutton")
+        self.assertIn("Industrial.Checkbutton.indicator", str(layout))
+        checked = app._checkbox_checked_image.get(4, 8)
+        unchecked = app._checkbox_unchecked_image.get(4, 8)
+        self.assertNotEqual(checked, unchecked)
+
 
 if __name__ == "__main__":
     unittest.main()

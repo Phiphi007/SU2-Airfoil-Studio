@@ -52,6 +52,7 @@ from qt_app.backend import ApiProcess, OptimizerProcess
 from qt_app.solver_monitor import SolverConvergenceMonitor
 from qt_app.theme import apply_industrial_theme
 from qt_app.vtk_viewer import VTKView
+from qt_app.workflow_stepper import WorkflowStepper
 
 
 ZH_TEXT = {
@@ -156,6 +157,7 @@ class MainWindow(QMainWindow):
         self._solver_stop_pending = False
         self._live_flow_signature: tuple[int, int] | None = None
         self._live_flow_failed_signature: tuple[int, int] | None = None
+        self._workflow_completed: set[int] = set()
         self._build_actions()
         self._build_menu_and_toolbar()
         self._build_central()
@@ -357,6 +359,10 @@ class MainWindow(QMainWindow):
             combo.blockSignals(False)
         for index, source in enumerate(self._tab_sources):
             self.tabs.setTabText(index, translated(source))
+        if hasattr(self, "workflow_stepper"):
+            self.workflow_stepper.setLabels(
+                [translated(source) for source in self._workflow_sources]
+            )
         if hasattr(self, "result_display_tabs"):
             self.result_display_tabs.setTabText(0, translated("Flow field"))
             self.result_display_tabs.setTabText(1, translated("Reports / files"))
@@ -579,21 +585,16 @@ class MainWindow(QMainWindow):
     def _build_pipeline_dock(self) -> None:
         dock = QDockWidget("Pipeline Browser", self)
         dock.setObjectName("PipelineDock")
-        self.pipeline = QTreeWidget()
-        self.pipeline.setHeaderHidden(True)
-        root = QTreeWidgetItem(["SU2 Airfoil Project"])
-        root.setExpanded(True)
-        for text in (
+        self._workflow_sources = [
             "Airfoil Adjustment",
             "Mesh Generation",
             "Solver",
             "Results",
             "Adjoint Optimization",
-        ):
-            root.addChild(QTreeWidgetItem([text]))
-        self.pipeline.addTopLevelItem(root)
-        self.pipeline.itemClicked.connect(self._pipeline_clicked)
-        dock.setWidget(self.pipeline)
+        ]
+        self.workflow_stepper = WorkflowStepper(self._workflow_sources)
+        self.workflow_stepper.stepClicked.connect(self.tabs.setCurrentIndex)
+        dock.setWidget(self.workflow_stepper)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
         self.pipeline_dock = dock
 
@@ -1164,6 +1165,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Optimization failed", "See Output / Convergence Log for details.")
             return
         self._set_status("Adjoint optimization completed")
+        self._set_workflow_completed(4)
         self._load_optimization_history()
 
     def _load_optimization_history(self) -> None:
@@ -1224,19 +1226,27 @@ class MainWindow(QMainWindow):
         try:
             self.result_viewer.load_vtu(path)
             self.result_display_tabs.setCurrentIndex(0)
+            self._set_workflow_completed(3)
             self.tabs.setCurrentIndex(3)
         except Exception as exc:
             QMessageBox.critical(self, "VTU display failed", str(exc))
 
     def _tab_changed(self, index: int) -> None:
         self.properties.setCurrentIndex(index)
+        if hasattr(self, "workflow_stepper"):
+            self.workflow_stepper.setCurrentStep(index)
 
-    def _pipeline_clicked(self, item: QTreeWidgetItem) -> None:
-        parent = item.parent()
-        if parent is None:
-            return
-        index = parent.indexOfChild(item)
-        self.tabs.setCurrentIndex(index)
+    def _set_workflow_completed(self, *steps: int) -> None:
+        self._workflow_completed.update(int(step) for step in steps)
+        if hasattr(self, "workflow_stepper"):
+            self.workflow_stepper.setCompletedSteps(self._workflow_completed)
+
+    def _invalidate_workflow_from(self, step: int) -> None:
+        self._workflow_completed = {
+            completed for completed in self._workflow_completed if completed < int(step)
+        }
+        if hasattr(self, "workflow_stepper"):
+            self.workflow_stepper.setCompletedSteps(self._workflow_completed)
 
     @staticmethod
     def _geometry_digest(x, upper, lower) -> str:
@@ -1274,6 +1284,8 @@ class MainWindow(QMainWindow):
             self._mesh_exists
             and self._meshed_settings_signature != self._mesh_settings_signature()
         )
+        if geometry_stale or settings_stale:
+            self._invalidate_workflow_from(1)
         if not self._mesh_exists:
             source = "Generate mesh"
             enabled = True
@@ -1303,6 +1315,7 @@ class MainWindow(QMainWindow):
         self._mesh_exists = True
         self._meshed_geometry_signature = self._geometry_signature
         self._meshed_settings_signature = self._mesh_settings_signature()
+        self._set_workflow_completed(0, 1)
         self._update_mesh_button_state()
 
     def _geometry_changed(self, x, upper, lower) -> None:
@@ -1310,8 +1323,11 @@ class MainWindow(QMainWindow):
         minimum = float((upper[2:-2] - lower[2:-2]).min())
         self.geometry_valid_label.setText(f"t/c max={thickness:.5f} | min={minimum:.5f}")
         signature = self._geometry_digest(x, upper, lower)
+        self._set_workflow_completed(0)
         if signature != self._geometry_signature:
             self._geometry_signature = signature
+            if self._mesh_exists and self._meshed_geometry_signature != signature:
+                self._invalidate_workflow_from(1)
             self._update_mesh_button_state()
 
     def _airfoil_path_changed(self, path: str) -> None:
@@ -1467,6 +1483,10 @@ class MainWindow(QMainWindow):
                 "stopped": "Stopped immediately",
             }.get(status, "Completed")
             self.solver_monitor.finish(result.get("last_values", {}), monitor_state)
+            if result.get("ok", True) and status in {"completed", "stopped_after_save"}:
+                self._set_workflow_completed(2)
+                if result.get("files"):
+                    self._set_workflow_completed(3)
             self.tabs.setCurrentIndex(3)
         else:
             self.tabs.setCurrentIndex(1)
@@ -1545,6 +1565,7 @@ class MainWindow(QMainWindow):
             try:
                 self.result_viewer.load_vtu(path)
                 self.result_display_tabs.setCurrentIndex(0)
+                self._set_workflow_completed(3)
                 self.tabs.setCurrentIndex(3)
             except Exception as exc:
                 QMessageBox.critical(self, "VTU display failed", str(exc))

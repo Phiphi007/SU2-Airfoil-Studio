@@ -670,10 +670,36 @@ class AutoFoilStudio(tk.Tk):
                   fieldbackground=[("readonly", UI_FIELD)],
                   selectbackground=[("readonly", UI_FIELD)],
                   selectforeground=[("readonly", UI_TEXT)])
-        style.configure("TCheckbutton", background=UI_PANEL, foreground="#E2E2E2",
-                        indicatorbackground=UI_FIELD, indicatorforeground=UI_BLUE,
+        # ``clam`` renders selected indicators as an X on some Windows/Tk
+        # builds.  Explicit images keep the familiar check mark everywhere.
+        self._checkbox_unchecked_image = tk.PhotoImage(width=14, height=14)
+        self._checkbox_checked_image = tk.PhotoImage(width=14, height=14)
+        for image, fill in (
+            (self._checkbox_unchecked_image, UI_FIELD),
+            (self._checkbox_checked_image, UI_BLUE),
+        ):
+            image.put(UI_BORDER, to=(0, 0, 14, 14))
+            image.put(fill, to=(1, 1, 13, 13))
+        for x, y in ((3, 7), (4, 8), (5, 9), (6, 8), (7, 7), (8, 6), (9, 5), (10, 4)):
+            self._checkbox_checked_image.put("#FFFFFF", to=(x, y, x + 2, y + 2))
+        style.element_create(
+            "Industrial.Checkbutton.indicator",
+            "image",
+            self._checkbox_unchecked_image,
+            ("selected", self._checkbox_checked_image),
+        )
+        style.layout(
+            "Industrial.TCheckbutton",
+            [("Checkbutton.padding", {"sticky": "nswe", "children": [
+                ("Industrial.Checkbutton.indicator", {"side": "left", "sticky": ""}),
+                ("Checkbutton.focus", {"side": "left", "sticky": "w", "children": [
+                    ("Checkbutton.label", {"sticky": "nswe"}),
+                ]}),
+            ]})],
+        )
+        style.configure("Industrial.TCheckbutton", background=UI_PANEL, foreground="#E2E2E2",
                         padding=(2, 1), font=(UI_FONT_FAMILY, 9, "bold"))
-        style.map("TCheckbutton", background=[("active", UI_PANEL)])
+        style.map("Industrial.TCheckbutton", background=[("active", UI_PANEL)])
         style.configure("TNotebook", background=UI_BG, bordercolor=UI_DIVIDER,
                         borderwidth=1, tabmargins=(0, 0, 0, 0))
         style.configure("TNotebook.Tab", background="#2D2D30", foreground="#B8B8B8",
@@ -1236,7 +1262,11 @@ class AutoFoilStudio(tk.Tk):
         self._add_field(numerical_box, 3, "限制器冻结迭代步", self.limiter_iter_var)
         self._add_field(numerical_box, 4, "CFL 数", self.cfl_var)
         ttk.Label(numerical_box, text="CFL 自适应").grid(row=5, column=0, sticky="w", padx=(8, 10), pady=6)
-        ttk.Checkbutton(numerical_box, variable=self.cfl_adapt_var).grid(row=5, column=1, sticky="w", pady=6)
+        ttk.Checkbutton(
+            numerical_box,
+            variable=self.cfl_adapt_var,
+            style="Industrial.TCheckbutton",
+        ).grid(row=5, column=1, sticky="w", pady=6)
         ttk.Label(numerical_box, text="线性求解器").grid(row=6, column=0, sticky="w", padx=(8, 10), pady=6)
         linear_combo = ttk.Combobox(
             numerical_box,
@@ -1249,6 +1279,7 @@ class AutoFoilStudio(tk.Tk):
         self._add_field(numerical_box, 8, "线性最大迭代", self.linear_iter_var)
         ttk.Checkbutton(numerical_box, text="低马赫数多重网格",
                         variable=self.low_mach_multigrid_var,
+                        style="Industrial.TCheckbutton",
                         command=self._apply_low_mach_settings).grid(row=9,column=0,columnspan=2,sticky="w",padx=8,pady=4)
 
         run_box = ttk.LabelFrame(self.solver_tab, text="运行与收敛控制", padding=14)

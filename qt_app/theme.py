@@ -97,6 +97,11 @@ QLineEdit, QSpinBox, QDoubleSpinBox { font-family: Consolas, "JetBrains Mono", m
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus { border-color: @ACCENT@; }
 QComboBox::drop-down { border: 0; width: 18px; }
 QComboBox QAbstractItemView { background: @PANEL@; border: 1px solid @BORDER@; selection-background-color: @SELECTION@; }
+QCheckBox { spacing: 5px; }
+QCheckBox::indicator { width: 13px; height: 13px; border: 1px solid @BORDER@; border-radius: 1px; background: @FIELD@; }
+QCheckBox::indicator:hover { border-color: @ACCENT_HOVER@; }
+QCheckBox::indicator:checked { background: @ACCENT@; border-color: @ACCENT_HOVER@; image: url("@CHECK_ICON@"); }
+QCheckBox::indicator:disabled { background: @RAISED@; border-color: @DIVIDER@; }
 QGroupBox { background: @PANEL@; border: 1px solid @DIVIDER@; margin-top: 13px; padding: 5px 4px 4px 4px; font-weight: 600; }
 QGroupBox::title { subcontrol-origin: margin; left: 5px; padding: 0 3px; color: @TEXT@; }
 QTabWidget::pane { border: 1px solid @DIVIDER@; top: -1px; }
@@ -125,6 +130,8 @@ def _style_sheet(colors: dict[str, str]) -> str:
     result = STYLE_TEMPLATE
     for key, value in colors.items():
         result = result.replace(f"@{key.upper()}@", value)
+    check_icon = (resource_root() / "assets" / "icons" / "checkmark.svg").as_posix()
+    result = result.replace("@CHECK_ICON@", check_icon)
     return result
 
 
